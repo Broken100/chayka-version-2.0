@@ -1,0 +1,10 @@
+{
+  "name": "Chayka Coffee",
+  "description": "Menú digital interactivo, sistema de reservas con mapa de mesas y panel de administración para Chayka Coffee en la Cascada de Peguche, Otavalo.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
