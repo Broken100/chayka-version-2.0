@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Reservation, KanbanStage } from '../../types';
 import { useReservation } from '../../context/ReservationContext';
+import { useReservationsQuery } from '../../lib/queries';
+import { useUpdateReservationStatus } from '../../lib/mutations';
 import { t } from '../../utils/translations';
 import { 
   User, 
@@ -17,13 +19,10 @@ import {
 } from 'lucide-react';
 
 export default function KanbanBoard() {
-  const { 
-    reservations, 
-    updateReservationStatus, 
-    tables, 
-    language,
-    addNotification
-  } = useReservation();
+  const { tables, language, addNotification } = useReservation();
+  const reservationsQuery = useReservationsQuery();
+  const updateStatusMutation = useUpdateReservationStatus();
+  const reservations: Reservation[] = (reservationsQuery.data ?? []) as unknown as Reservation[];
 
   // Keep track of which column is being hovered during a drag operation
   const [activeDragOverCol, setActiveDragOverCol] = useState<KanbanStage | null>(null);
@@ -74,7 +73,7 @@ export default function KanbanBoard() {
 
     const res = reservations.find(r => r.id === reservationId);
     if (res && res.status !== targetStage) {
-      updateReservationStatus(reservationId, targetStage);
+      updateStatusMutation.mutate({ id: reservationId, status: targetStage });
       
       const statusLabel = t(`admin.columns.${targetStage}`, language);
       addNotification(
@@ -237,7 +236,7 @@ export default function KanbanBoard() {
                           value={res.status}
                           onChange={(e) => {
                             const newStatus = e.target.value as KanbanStage;
-                            updateReservationStatus(res.id, newStatus);
+                            updateStatusMutation.mutate({ id: res.id, status: newStatus });
                             const statusLabel = t(`admin.columns.${newStatus}`, language);
                             addNotification(
                               language === 'es' ? 'Estado Actualizado' : 'Status Updated',

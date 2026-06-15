@@ -4,9 +4,9 @@
  */
 
 import { useState, type Dispatch, type SetStateAction } from 'react';
-import { MenuItem, Category, ReservationTable, Reservation, BusinessConfig } from '../types';
+import { MenuItem, Category, ReservationTable, BusinessConfig } from '../types';
 import { useReservation } from '../context/ReservationContext';
-import { useAdminAuth, useAdminLogout } from '../lib/queries';
+import { useAdminAuth, useAdminLogout, useReservationsQuery } from '../lib/queries';
 import { useQueryClient } from '@tanstack/react-query';
 import KanbanBoard from './admin/KanbanBoard';
 import MenuManager from './admin/MenuManager';
@@ -29,8 +29,6 @@ interface AdminPanelProps {
   menuProducts: MenuItem[];
   setMenuProducts: Dispatch<SetStateAction<MenuItem[]>>;
   categories: Category[];
-  reservations: Reservation[];
-  setReservations: Dispatch<SetStateAction<Reservation[]>>;
 }
 
 export default function AdminPanel({
@@ -40,9 +38,7 @@ export default function AdminPanel({
   setTables,
   menuProducts,
   setMenuProducts,
-  categories,
-  reservations,
-  setReservations
+  categories
 }: AdminPanelProps) {
   const { language } = useReservation();
   const isEs = language === 'es';
@@ -50,6 +46,7 @@ export default function AdminPanel({
   const qc = useQueryClient();
   const { data: authData, isLoading: authLoading } = useAdminAuth();
   const logoutMutation = useAdminLogout();
+  const reservationsQuery = useReservationsQuery();
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const authenticated = authData?.authenticated ?? isAuthenticated;
@@ -67,7 +64,8 @@ export default function AdminPanel({
   const [activeTab, setActiveTab] = useState<'reservations' | 'menu' | 'tables' | 'settings'>('reservations');
 
   // Computations for dashboard overview cards
-  const totalRevenueSimulated = reservations
+  const reservationsData = reservationsQuery.data ?? [];
+  const totalRevenueSimulated = reservationsData
     .filter((r) => ['simulated_paid', 'success'].includes(r.paymentStatus) && r.status !== 'cancelled')
     .reduce((sum, r) => {
       const tbl = tables.find((t) => t.id === r.tableId);
@@ -79,7 +77,7 @@ export default function AdminPanel({
       return sum + Math.max(minFee, preFee);
     }, 0);
 
-  const pendingConfirmations = reservations.filter((r) => r.status === 'pending').length;
+  const pendingConfirmations = reservationsData.filter((r) => r.status === 'pending').length;
 
   const tabLabels = {
     reservations: isEs ? 'Tablero Kanban' : 'Kanban Board',
@@ -144,7 +142,7 @@ export default function AdminPanel({
             <span className="text-[10px] text-espresso/60 uppercase font-bold tracking-wider">
               {isEs ? 'Reservas Totales' : 'Total Bookings'}
             </span>
-            <p className="text-2xl font-black font-serif text-espresso mt-0.5">{reservations.length}</p>
+            <p className="text-2xl font-black font-serif text-espresso mt-0.5">{reservationsData.length}</p>
           </div>
         </div>
 
@@ -189,7 +187,7 @@ export default function AdminPanel({
       <div className="flex border-b border-espresso/15 gap-2 overflow-x-auto pb-1">
         {(Object.keys(tabLabels) as Array<keyof typeof tabLabels>).map((tabId) => {
           let count: number | undefined = undefined;
-          if (tabId === 'reservations') count = reservations.length;
+          if (tabId === 'reservations') count = reservationsData.length;
           if (tabId === 'menu') count = menuProducts.length;
           if (tabId === 'tables') count = tables.length;
 

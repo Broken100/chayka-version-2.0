@@ -16,8 +16,6 @@ const defaultProps = {
   menuProducts: INITIAL_PRODUCTS,
   setMenuProducts: vi.fn(),
   categories: INITIAL_CATEGORIES,
-  reservations: [],
-  setReservations: vi.fn(),
 };
 
 describe('AdminPanel', () => {
@@ -30,6 +28,7 @@ describe('AdminPanel', () => {
       if (path === '/menu') return [];
       if (path === '/tables') return [];
       if (path === '/business-config') return {};
+      if (path === '/reservations') return [];
       throw new Error(`Unhandled mock path: ${path}`);
     });
 
