@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { MenuItem, ReservationTable, Reservation, BusinessConfig, Language, KanbanStage } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_TABLES, DEFAULT_BUSINESS_CONFIG } from '../data';
 import { NotificationMsg } from '../components/NotificationToast';
+import { useMenuQuery, useTablesQuery, useBusinessConfigQuery } from '../lib/queries';
 
 export interface ReservationContextType {
   reservations: Reservation[];
@@ -67,41 +68,17 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
     }
   };
 
-  // Core Business States
-  const [menuProducts, setMenuProducts] = useState<MenuItem[]>(() => {
-    try {
-      const menuVersion = 'v3_chayka_photos';
-      const storedVersion = localStorage.getItem('chayka_menu_version');
-      const storedProducts = localStorage.getItem('chayka_menu_products');
-      if (storedProducts && storedVersion === menuVersion) {
-        return JSON.parse(storedProducts);
-      }
-    } catch (e) {
-      console.error('Error parsing menuProducts from localStorage', e);
-    }
-    return INITIAL_PRODUCTS;
-  });
+  // Backend-driven reads (PR#2). Fall back to local seed constants while loading
+  // so the UI never renders empty for the initial paint.
+  const menuQuery = useMenuQuery();
+  const tablesQuery = useTablesQuery();
+  const configQuery = useBusinessConfigQuery();
 
-  const [tables, setTables] = useState<ReservationTable[]>(() => {
-    try {
-      const storedTables = localStorage.getItem('chayka_tables');
-      if (storedTables) return JSON.parse(storedTables);
-    } catch (e) {
-      console.error('Error parsing tables from localStorage', e);
-    }
-    return INITIAL_TABLES;
-  });
+  const menuProducts: MenuItem[] = menuQuery.data ?? INITIAL_PRODUCTS;
+  const tables: ReservationTable[] = tablesQuery.data ?? INITIAL_TABLES;
+  const businessConfig: BusinessConfig = configQuery.data ?? DEFAULT_BUSINESS_CONFIG;
 
-  const [businessConfig, setBusinessConfig] = useState<BusinessConfig>(() => {
-    try {
-      const storedConfig = localStorage.getItem('chayka_business_config');
-      if (storedConfig) return JSON.parse(storedConfig);
-    } catch (e) {
-      console.error('Error parsing businessConfig from localStorage', e);
-    }
-    return DEFAULT_BUSINESS_CONFIG;
-  });
-
+  // Reservations still live client-side for now (PR#3 will swap them to a query).
   const [reservations, setReservations] = useState<Reservation[]>(() => {
     try {
       const storedReservations = localStorage.getItem('chayka_reservations');
@@ -110,7 +87,6 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
       console.error('Error parsing reservations from localStorage', e);
     }
 
-    // Pre-populate some creative mock bookings to make UI beautiful on start
     const todayStr = new Date().toISOString().split('T')[0];
     return [
       {
@@ -149,32 +125,7 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
   // Simulated Notifications Feed State
   const [notifications, setNotifications] = useState<NotificationMsg[]>([]);
 
-  // LocalStorage Synchronization Effects
-  useEffect(() => {
-    try {
-      localStorage.setItem('chayka_menu_products', JSON.stringify(menuProducts));
-      localStorage.setItem('chayka_menu_version', 'v3_chayka_photos');
-    } catch (e) {
-      console.error('Error saving menuProducts to localStorage', e);
-    }
-  }, [menuProducts]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('chayka_tables', JSON.stringify(tables));
-    } catch (e) {
-      console.error('Error saving tables to localStorage', e);
-    }
-  }, [tables]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('chayka_business_config', JSON.stringify(businessConfig));
-    } catch (e) {
-      console.error('Error saving businessConfig to localStorage', e);
-    }
-  }, [businessConfig]);
-
+  // LocalStorage sync for reservations (kept until PR#3).
   useEffect(() => {
     try {
       localStorage.setItem('chayka_reservations', JSON.stringify(reservations));
@@ -203,13 +154,14 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
   };
 
   const updateMenuProduct = (product: MenuItem) => {
+    // PR#3 will turn this into a useMutation that invalidates the menu query.
     setMenuProducts((prev) =>
       prev.map((p) => (p.id === product.id ? product : p))
     );
   };
 
   // Notification actions
-  const addNotification = (title: string, message: string, type: 'success' | 'info' | 'alert') => {
+  const addNotification = useCallback((title: string, message: string, type: 'success' | 'info' | 'alert') => {
     const newNotif: NotificationMsg = {
       id: 'notif_' + Date.now(),
       title,
@@ -218,10 +170,21 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
       time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
     };
     setNotifications((prev) => [newNotif, ...prev]);
-  };
+  }, []);
 
-  const dismissNotification = (id: string) => {
+  const dismissNotification = useCallback((id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  // Backwards-compatible setters that consumers still use. These will go away in PR#3.
+  const setMenuProducts: React.Dispatch<React.SetStateAction<MenuItem[]>> = () => {
+    console.warn('setMenuProducts is a no-op in PR#2; will be removed in PR#3');
+  };
+  const setTables: React.Dispatch<React.SetStateAction<ReservationTable[]>> = () => {
+    console.warn('setTables is a no-op in PR#2; will be removed in PR#3');
+  };
+  const setBusinessConfig: React.Dispatch<React.SetStateAction<BusinessConfig>> = () => {
+    console.warn('setBusinessConfig is a no-op in PR#2; will be removed in PR#3');
   };
 
   return (
