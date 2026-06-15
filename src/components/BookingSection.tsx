@@ -443,7 +443,7 @@ export default function BookingSection({
             <form onSubmit={handleNextStep1} className="max-w-xl mx-auto bg-editorial-bg border border-editorial-charcoal/15 p-6 rounded-none space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-[10px] font-bold text-editorial-charcoal/60 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                  <label htmlFor="booking-date-input" className="block text-[10px] font-bold text-editorial-charcoal/60 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                     <CalendarIcon className="w-3.5 h-3.5 text-editorial-charcoal" />
                     <span>{language === 'es' ? 'Seleccionar Fecha' : 'Select Date'}</span>
                   </label>
@@ -459,7 +459,7 @@ export default function BookingSection({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-editorial-charcoal/60 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                  <label htmlFor="booking-timeslot-select" className="block text-[10px] font-bold text-editorial-charcoal/60 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-editorial-charcoal" />
                     <span>{language === 'es' ? 'Bloque Horario' : 'Time Slot'}</span>
                   </label>

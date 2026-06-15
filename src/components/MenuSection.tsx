@@ -406,6 +406,7 @@ export default function MenuSection({
             >
               <button
                 onClick={() => setSelectedItem(null)}
+                aria-label={language === 'es' ? 'Cerrar' : 'Close'}
                 className="absolute top-4 right-4 z-10 bg-espresso text-coffee-bg hover:bg-espresso/90 p-2.5 rounded-full cursor-pointer transition shadow-md"
                 id="detail-modal-close"
               >
