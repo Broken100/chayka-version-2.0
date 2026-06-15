@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
 import publicRoutes from './routes/public.js';
+import adminRoutes from './routes/admin.js';
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -13,6 +14,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ ok: true, service: 'chayka-api' });
 });
 
+app.use('/api/admin', adminRoutes);
 app.use('/api', publicRoutes);
 
 // 404 fallback for unknown /api routes
