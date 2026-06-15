@@ -5,13 +5,12 @@
 
 import { useState, type FormEvent } from 'react';
 import { useReservation } from '../../context/ReservationContext';
-import { Lock } from 'lucide-react';
+import { useAdminLogin } from '../../lib/queries';
+import { Lock, Loader2 } from 'lucide-react';
 
 interface AdminLoginProps {
-  onAuthenticated: () => void;
+  onAuthenticated?: () => void;
 }
-
-const DEFAULT_PASSWORDS = ['admin123', 'chayka', '1234'];
 
 export default function AdminLogin({ onAuthenticated }: AdminLoginProps) {
   const { language } = useReservation();
@@ -20,27 +19,32 @@ export default function AdminLogin({ onAuthenticated }: AdminLoginProps) {
   const [password, setPassword] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
 
-  const allowedPasswords = (() => {
-    const envPasswords = import.meta.env.VITE_ADMIN_PASSWORDS;
-    if (typeof envPasswords === 'string' && envPasswords.trim().length > 0) {
-      return envPasswords.split(',').map((p) => p.trim());
-    }
-    return DEFAULT_PASSWORDS;
-  })();
+  const loginMutation = useAdminLogin();
 
   const handleLogin = (e: FormEvent) => {
     e.preventDefault();
-    if (allowedPasswords.includes(password)) {
-      onAuthenticated();
-      setErrorMsg('');
-    } else {
-      setErrorMsg(isEs ? 'Contraseña incorrecta. Prueba con "chayka" o "admin123"' : 'Incorrect password. Try "chayka" or "admin123"');
-    }
+    setErrorMsg('');
+    loginMutation.mutate(password, {
+      onSuccess: () => {
+        setPassword('');
+        setErrorMsg('');
+        onAuthenticated?.();
+      },
+      onError: (error) => {
+        setErrorMsg(
+          error instanceof Error
+            ? error.message
+            : isEs ? 'Error de autenticación' : 'Authentication error'
+        );
+      }
+    });
   };
 
   const handleBypassDemo = () => {
-    onAuthenticated();
+    onAuthenticated?.();
   };
+
+  const showDemo = import.meta.env.VITE_DEMO_MODE === 'true';
 
   return (
     <div className="max-w-md mx-auto py-12 px-6" id="admin-login-wrapper">
@@ -78,27 +82,33 @@ export default function AdminLogin({ onAuthenticated }: AdminLoginProps) {
 
           <button
             type="submit"
-            className="w-full bg-ochre hover:bg-ochre/95 text-coffee-bg font-bold py-2.5 rounded-xl cursor-pointer text-xs uppercase tracking-wider transition-colors shadow-sm"
+            disabled={loginMutation.isPending}
+            className="w-full bg-ochre hover:bg-ochre/95 disabled:bg-ochre/60 text-coffee-bg font-bold py-2.5 rounded-xl cursor-pointer text-xs uppercase tracking-wider transition-colors shadow-sm flex items-center justify-center gap-2"
             id="admin-login-submit"
           >
-            {isEs ? 'Iniciar Sesión' : 'Sign In'}
+            {loginMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+            {loginMutation.isPending
+              ? (isEs ? 'Verificando…' : 'Verifying…')
+              : (isEs ? 'Iniciar Sesión' : 'Sign In')}
           </button>
         </form>
 
-        <div className="border-t border-espresso/10 pt-5 space-y-3 text-center">
-          <p className="text-espresso/50 text-[10px] leading-relaxed">
-            {isEs
-              ? '¿Probando la aplicación en el editor? Presiona debajo para ingresar de forma libre sin contraseña (Acceso Demo de Prueba).'
-              : 'Testing the app in the editor? Press below to enter freely without a password (Demo Trial Access).'}
-          </p>
-          <button
-            onClick={handleBypassDemo}
-            className="px-4 py-2 bg-transparent border border-espresso/25 hover:border-espresso hover:bg-espresso/5 text-espresso rounded-xl text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer w-full"
-            id="admin-bypass-btn"
-          >
-            {isEs ? 'Acceso Directo (Demo)' : 'Direct Access (Demo)'}
-          </button>
-        </div>
+        {showDemo && (
+          <div className="border-t border-espresso/10 pt-5 space-y-3 text-center">
+            <p className="text-espresso/50 text-[10px] leading-relaxed">
+              {isEs
+                ? 'Acceso rápido de demostración (sin contraseña).'
+                : 'Quick demo access (no password).'}
+            </p>
+            <button
+              onClick={handleBypassDemo}
+              className="px-4 py-2 bg-transparent border border-espresso/25 hover:border-espresso hover:bg-espresso/5 text-espresso rounded-xl text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer w-full"
+              id="admin-bypass-btn"
+            >
+              {isEs ? 'Acceso Directo (Demo)' : 'Direct Access (Demo)'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

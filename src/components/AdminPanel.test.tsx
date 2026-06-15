@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '../test-utils';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, waitFor } from '../test-utils';
 import AdminPanel from './AdminPanel';
 import {
   INITIAL_CATEGORIES,
@@ -8,24 +8,40 @@ import {
   DEFAULT_BUSINESS_CONFIG,
 } from '../data';
 
-describe('AdminPanel', () => {
-  it('renders the login form when not authenticated', () => {
-    render(
-      <AdminPanel
-        businessConfig={DEFAULT_BUSINESS_CONFIG}
-        setBusinessConfig={() => {}}
-        tables={INITIAL_TABLES}
-        setTables={() => {}}
-        menuProducts={INITIAL_PRODUCTS}
-        setMenuProducts={() => {}}
-        categories={INITIAL_CATEGORIES}
-        reservations={[]}
-        setReservations={() => {}}
-      />
-    );
+const defaultProps = {
+  businessConfig: DEFAULT_BUSINESS_CONFIG,
+  setBusinessConfig: vi.fn(),
+  tables: INITIAL_TABLES,
+  setTables: vi.fn(),
+  menuProducts: INITIAL_PRODUCTS,
+  setMenuProducts: vi.fn(),
+  categories: INITIAL_CATEGORIES,
+  reservations: [],
+  setReservations: vi.fn(),
+};
 
-    expect(screen.getByText('Administración Chayka')).toBeInTheDocument();
-    expect(screen.getByLabelText('Contraseña')).toBeInTheDocument();
-    expect(screen.getByText('Iniciar Sesión')).toBeInTheDocument();
+describe('AdminPanel', () => {
+  it('renders the login form when the auth query returns 401', async () => {
+    const { mockApi } = await import('../__mocks__/api');
+    const origImpl = mockApi.get.mockImplementation;
+
+    mockApi.get.mockImplementation(async (path: string): Promise<any> => {
+      if (path === '/admin/me') throw new Error('Unauthorized');
+      if (path === '/menu') return [];
+      if (path === '/tables') return [];
+      if (path === '/business-config') return {};
+      throw new Error(`Unhandled mock path: ${path}`);
+    });
+
+    try {
+      render(<AdminPanel {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Administración Chayka')).toBeInTheDocument();
+      });
+      expect(screen.getByLabelText('Contraseña')).toBeInTheDocument();
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });

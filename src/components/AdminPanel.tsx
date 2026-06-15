@@ -6,6 +6,8 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { MenuItem, Category, ReservationTable, Reservation, BusinessConfig } from '../types';
 import { useReservation } from '../context/ReservationContext';
+import { useAdminAuth, useAdminLogout } from '../lib/queries';
+import { useQueryClient } from '@tanstack/react-query';
 import KanbanBoard from './admin/KanbanBoard';
 import MenuManager from './admin/MenuManager';
 import AdminLogin from './admin/AdminLogin';
@@ -45,7 +47,21 @@ export default function AdminPanel({
   const { language } = useReservation();
   const isEs = language === 'es';
 
+  const qc = useQueryClient();
+  const { data: authData, isLoading: authLoading } = useAdminAuth();
+  const logoutMutation = useAdminLogout();
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const authenticated = authData?.authenticated ?? isAuthenticated;
+
+  const handleSignOut = () => {
+    logoutMutation.mutate(undefined, {
+      onSuccess: () => {
+        void qc.removeQueries({ queryKey: ['admin', 'me'] });
+        setIsAuthenticated(false);
+      }
+    });
+  };
 
   // Active sub-sections inside Admin dashboard
   const [activeTab, setActiveTab] = useState<'reservations' | 'menu' | 'tables' | 'settings'>('reservations');
@@ -72,7 +88,17 @@ export default function AdminPanel({
     settings: isEs ? 'Configuración' : 'Settings'
   };
 
-  if (!isAuthenticated) {
+  if (authLoading) {
+    return (
+      <div className="animate-pulse text-espresso/60 py-12 text-center" data-testid="admin-auth-loading">
+        <span className="text-sm font-medium">
+          {isEs ? 'Cargando…' : 'Loading…'}
+        </span>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
     return <AdminLogin onAuthenticated={() => setIsAuthenticated(true)} />;
   }
 
@@ -98,9 +124,10 @@ export default function AdminPanel({
         </div>
 
         <button
-          onClick={() => setIsAuthenticated(false)}
-          className="bg-espresso/5 text-espresso/70 hover:text-espresso border border-espresso/10 hover:border-espresso/30 px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+          onClick={handleSignOut}
+          className="bg-espresso/5 text-espresso/70 hover:text-espresso border border-espresso/10 hover:border-espresso/30 px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
           id="admin-logout-btn"
+          disabled={logoutMutation.isPending}
         >
           <Power className="w-4 h-4 text-rose-600" />
           <span>{isEs ? 'Cerrar Sesión' : 'Sign Out'}</span>
