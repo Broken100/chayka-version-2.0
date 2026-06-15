@@ -3,7 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { db } from '../db/client.js';
 import { adminSessions } from '../db/schema.js';
 
-export const SESSION_COOKIE = 'chayka_session';
+export const SESSION_COOKIE = 'chayka_admin_session';
 
 /** Middleware: requires a valid session cookie. 401 if missing or expired. */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
