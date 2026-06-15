@@ -1,13 +1,16 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { tables, reservations, businessConfig, menuItems } from '../db/schema.js';
+import { tables, reservations, businessConfig, menuItems, adminSessions } from '../db/schema.js';
 import {
   createTableSchema,
   updateTableSchema,
   updateBusinessConfigSchema,
-  updateReservationStatusSchema
+  updateReservationStatusSchema,
+  adminLoginSchema
 } from '../lib/validation.js';
+import { requireAdmin, SESSION_COOKIE } from '../lib/auth.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
+import { randomUUID } from 'crypto';
 
 const router = Router();
 
@@ -18,6 +21,82 @@ function asyncHandler(
     fn(req, res, next).catch(next);
   };
 }
+
+// ─── Public auth endpoints (no session required) ──────────────────────────────
+
+router.post(
+  '/login',
+  asyncHandler(async (req, res) => {
+    const parsed = adminLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'password is required' });
+      return;
+    }
+
+    const passwords = (process.env.ADMIN_PASSWORDS ?? '').split(',').map((p) => p.trim());
+    if (!passwords.includes(parsed.data.password)) {
+      res.status(401).json({ error: 'Invalid password' });
+      return;
+    }
+
+    const token = randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    await db.insert(adminSessions).values({ token, expiresAt });
+
+    res.cookie(SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      secure: process.env.NODE_ENV === 'production'
+    });
+
+    res.json({ ok: true, expiresAt: expiresAt.toISOString() });
+  })
+);
+
+router.post(
+  '/logout',
+  asyncHandler(async (req, res) => {
+    const token = req.cookies?.[SESSION_COOKIE];
+    if (token) {
+      await db.delete(adminSessions).where(eq(adminSessions.token, token));
+    }
+    res.clearCookie(SESSION_COOKIE);
+    res.json({ ok: true });
+  })
+);
+
+router.get(
+  '/me',
+  asyncHandler(async (req, res) => {
+    const token = req.cookies?.[SESSION_COOKIE];
+    if (!token) {
+      res.status(401).json({ authenticated: false });
+      return;
+    }
+    const rows = await db
+      .select()
+      .from(adminSessions)
+      .where(eq(adminSessions.token, token))
+      .limit(1);
+    if (rows.length === 0) {
+      res.status(401).json({ authenticated: false });
+      return;
+    }
+    const session = rows[0];
+    if (new Date(session.expiresAt) < new Date()) {
+      await db.delete(adminSessions).where(eq(adminSessions.token, token));
+      res.status(401).json({ authenticated: false, expired: true });
+      return;
+    }
+    res.json({ authenticated: true, expiresAt: session.expiresAt.toISOString() });
+  })
+);
+
+// ─── Protected routes (require session) ────────────────────────────────────────
+
+router.use(requireAdmin);
 
 // Menu items
 router.put(
