@@ -2,6 +2,16 @@ import { vi } from 'vitest';
 import { INITIAL_PRODUCTS, INITIAL_TABLES, DEFAULT_BUSINESS_CONFIG } from '../data';
 import type { MenuItemRow, TableRow, BusinessConfigRow } from '../lib/queries';
 
+class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, body: unknown, message: string) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 const menuRows: MenuItemRow[] = INITIAL_PRODUCTS.map((p) => ({
   id: p.id,
   nameEs: p.name.es,
@@ -48,9 +58,18 @@ export const mockApi = {
     if (path === '/menu') return menuRows;
     if (path === '/tables') return tableRows;
     if (path === '/business-config') return configRow;
+    if (path === '/admin/me') return { authenticated: true, expiresAt: new Date(Date.now() + 86400000).toISOString() };
     throw new Error(`Unhandled mock path: ${path}`);
   }),
-  post: vi.fn(),
+  post: vi.fn(async (path: string, body?: unknown) => {
+    if (path === '/admin/login') {
+      const { password } = body as { password: string };
+      if (password === 'wrong') throw new ApiError(401, { error: 'Invalid credentials' }, 'Invalid credentials');
+      return { ok: true, expiresAt: new Date(Date.now() + 86400000).toISOString() };
+    }
+    if (path === '/admin/logout') return { ok: true };
+    return {};
+  }),
   put: vi.fn(),
   del: vi.fn()
 };
