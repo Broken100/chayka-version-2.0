@@ -119,6 +119,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, amount, descr
       } else {
         setStatus('failed');
       }
+    }, 1500);
   };
 
   const handleSimulateTransferPayment = () => {
