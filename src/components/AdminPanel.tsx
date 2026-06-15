@@ -182,7 +182,7 @@ export default function AdminPanel({
 
           <form onSubmit={handleLogin} className="space-y-4 text-left">
             <div>
-              <label className="block text-[10px] font-bold text-espresso/70 uppercase tracking-wider mb-1.5">
+              <label htmlFor="admin-passwd-input" className="block text-[10px] font-bold text-espresso/70 uppercase tracking-wider mb-1.5">
                 {isEs ? 'Contraseña' : 'Password'}
               </label>
               <input
