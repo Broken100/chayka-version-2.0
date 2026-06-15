@@ -4,6 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import publicRoutes from './routes/public.js';
 import adminRoutes from './routes/admin.js';
+import { requestTimeout } from './lib/timeout.js';
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -11,6 +12,9 @@ const port = Number(process.env.PORT) || 3001;
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+
+// 5-second request timeout: abort with 504 if a handler has not finished.
+app.use(requestTimeout());
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ ok: true, service: 'chayka-api' });
