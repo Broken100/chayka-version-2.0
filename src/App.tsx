@@ -36,7 +36,6 @@ function AppContent() {
     notifications,
     addNotification,
     dismissNotification,
-    setReservations,
     setMenuProducts,
     setTables,
     setBusinessConfig
@@ -148,8 +147,6 @@ function AppContent() {
             menuProducts={menuProducts}
             setMenuProducts={setMenuProducts}
             categories={INITIAL_CATEGORIES}
-            reservations={reservations}
-            setReservations={setReservations}
           />
         </main>
       )}

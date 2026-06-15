@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+﻿import React, { createContext, useContext, useState, useCallback } from 'react';
 import { MenuItem, ReservationTable, Reservation, BusinessConfig, Language, KanbanStage } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_TABLES, DEFAULT_BUSINESS_CONFIG } from '../data';
 import { NotificationMsg } from '../components/NotificationToast';
-import { useMenuQuery, useTablesQuery, useBusinessConfigQuery } from '../lib/queries';
+import { useMenuQuery, useTablesQuery, useBusinessConfigQuery, useReservationsQuery } from '../lib/queries';
 import { useAddReservation, useUpdateReservationStatus, useUpdateMenuProduct } from '../lib/mutations';
 
 export interface ReservationContextType {
@@ -20,7 +20,6 @@ export interface ReservationContextType {
   notifications: NotificationMsg[];
   addNotification: (title: string, message: string, type: 'success' | 'info' | 'alert') => void;
   dismissNotification: (id: string) => void;
-  setReservations: React.Dispatch<React.SetStateAction<Reservation[]>>;
   setMenuProducts: React.Dispatch<React.SetStateAction<MenuItem[]>>;
   setTables: React.Dispatch<React.SetStateAction<ReservationTable[]>>;
   setBusinessConfig: React.Dispatch<React.SetStateAction<BusinessConfig>>;
@@ -69,126 +68,49 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
     }
   };
 
-  // Backend-driven reads (PR#2). Fall back to local seed constants while loading
-  // so the UI never renders empty for the initial paint.
+  // Backend-driven reads. Fall back to local seed constants while loading.
   const menuQuery = useMenuQuery();
   const tablesQuery = useTablesQuery();
   const configQuery = useBusinessConfigQuery();
+  const reservationsQuery = useReservationsQuery();
 
   const menuProducts: MenuItem[] = menuQuery.data ?? INITIAL_PRODUCTS;
   const tables: ReservationTable[] = tablesQuery.data ?? INITIAL_TABLES;
   const businessConfig: BusinessConfig = configQuery.data ?? DEFAULT_BUSINESS_CONFIG;
-
-  // Reservations still live client-side for now (PR#3 will swap them to a query).
-  const [reservations, setReservations] = useState<Reservation[]>(() => {
-    try {
-      const storedReservations = localStorage.getItem('chayka_reservations');
-      if (storedReservations) return JSON.parse(storedReservations);
-    } catch (e) {
-      console.error('Error parsing reservations from localStorage', e);
-    }
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    return [
-      {
-        id: 'RES-882794',
-        customerName: 'Ariel Pilataxi (Turista)',
-        customerEmail: 'ariel.p@gmail.com',
-        customerPhone: '+593985123456',
-        date: todayStr,
-        timeSlot: '11:00',
-        tableId: 't_deck_1',
-        area: 'waterfall_deck',
-        guestsCount: 2,
-        status: 'confirmed',
-        paymentStatus: 'success',
-        paymentReference: 'PAY-W7X892',
-        timestamp: new Date().toISOString()
-      },
-      {
-        id: 'RES-441295',
-        customerName: 'Gabriela Coba',
-        customerEmail: 'gabriela_c@hotmail.com',
-        customerPhone: '+593994234567',
-        date: todayStr,
-        timeSlot: '15:30',
-        tableId: 't_fire_1',
-        area: 'fireplace_cozy',
-        guestsCount: 2,
-        status: 'confirmed',
-        paymentStatus: 'success',
-        paymentReference: 'PAY-K9L211',
-        timestamp: new Date().toISOString()
-      }
-    ];
-  });
+  const reservations: Reservation[] = (reservationsQuery.data ?? []) as unknown as Reservation[];
 
   // Simulated Notifications Feed State
   const [notifications, setNotifications] = useState<NotificationMsg[]>([]);
 
-  // LocalStorage sync for reservations (kept until PR#3).
-  useEffect(() => {
-    try {
-      localStorage.setItem('chayka_reservations', JSON.stringify(reservations));
-    } catch (e) {
-      console.error('Error saving reservations to localStorage', e);
-    }
-  }, [reservations]);
-
-  // Operations (PR#3: backed by API mutations; keep local cache for optimistic UI)
+  // Operations (backed by API mutations; refetch-only, no optimistic UI)
   const addReservationMutation = useAddReservation();
   const updateStatusMutation = useUpdateReservationStatus();
   const updateMenuMutation = useUpdateMenuProduct();
 
   const addReservation = async (res: Omit<Reservation, 'id' | 'timestamp'>): Promise<Reservation> => {
-    const optimistic: Reservation = {
-      ...res,
-      id: `RES-${Math.floor(100000 + Math.random() * 900000)}`,
-      timestamp: new Date().toISOString()
-    };
-    setReservations((prev) => [optimistic, ...prev]);
-    try {
-      const result = await addReservationMutation.mutateAsync({
-        customerName: res.customerName,
-        customerEmail: res.customerEmail,
-        customerPhone: res.customerPhone,
-        date: res.date,
-        timeSlot: res.timeSlot,
-        tableId: res.tableId,
-        area: res.area,
-        guestsCount: res.guestsCount,
-        notes: res.notes,
-        selectedOrderItems: res.selectedOrderItems,
-        paymentStatus: res.paymentStatus,
-        paymentReference: res.paymentReference,
-        status: res.status
-      });
-      // Replace optimistic row with server-confirmed one
-      setReservations((prev) => prev.map((r) => (r.id === optimistic.id ? { ...r, id: result.id } : r)));
-      addNotification(
-        'Reservación creada',
-        `ID ${result.id} confirmada.`,
-        'success'
-      );
-      return { ...optimistic, id: result.id };
-    } catch (e) {
-      setReservations((prev) => prev.filter((r) => r.id !== optimistic.id));
-      addNotification(
-        'Error al reservar',
-        e instanceof Error ? e.message : 'Error desconocido',
-        'alert'
-      );
-      throw e;
-    }
+    const result = await addReservationMutation.mutateAsync({
+      customerName: res.customerName,
+      customerEmail: res.customerEmail,
+      customerPhone: res.customerPhone,
+      date: res.date,
+      timeSlot: res.timeSlot,
+      tableId: res.tableId,
+      area: res.area,
+      guestsCount: res.guestsCount,
+      notes: res.notes,
+      selectedOrderItems: res.selectedOrderItems,
+      paymentStatus: res.paymentStatus,
+      paymentReference: res.paymentReference,
+      status: res.status
+    });
+    addNotification('Reservaci\u00f3n creada', 'ID ' + result.id + ' confirmada.', 'success');
+    return { ...res, id: result.id, timestamp: new Date().toISOString() } as Reservation;
   };
 
   const updateReservationStatus = async (id: string, status: KanbanStage): Promise<void> => {
-    const previous = reservations;
-    setReservations((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
     try {
       await updateStatusMutation.mutateAsync({ id, status });
     } catch (e) {
-      setReservations(previous);
       addNotification(
         'Error al actualizar estado',
         e instanceof Error ? e.message : 'Error desconocido',
@@ -225,15 +147,15 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
-  // Backwards-compatible setters that consumers still use. These will go away in PR#3.
+  // Backwards-compatible no-op setters kept until PR#4.
   const setMenuProducts: React.Dispatch<React.SetStateAction<MenuItem[]>> = () => {
-    console.warn('setMenuProducts is a no-op in PR#2; will be removed in PR#3');
+    console.warn('setMenuProducts is a no-op in PR#3; will be removed in PR#4');
   };
   const setTables: React.Dispatch<React.SetStateAction<ReservationTable[]>> = () => {
-    console.warn('setTables is a no-op in PR#2; will be removed in PR#3');
+    console.warn('setTables is a no-op in PR#3; will be removed in PR#4');
   };
   const setBusinessConfig: React.Dispatch<React.SetStateAction<BusinessConfig>> = () => {
-    console.warn('setBusinessConfig is a no-op in PR#2; will be removed in PR#3');
+    console.warn('setBusinessConfig is a no-op in PR#3; will be removed in PR#4');
   };
 
   return (
@@ -253,7 +175,6 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
         notifications,
         addNotification,
         dismissNotification,
-        setReservations,
         setMenuProducts,
         setTables,
         setBusinessConfig
