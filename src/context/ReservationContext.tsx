@@ -3,6 +3,7 @@ import { MenuItem, ReservationTable, Reservation, BusinessConfig, Language, Kanb
 import { INITIAL_PRODUCTS, INITIAL_TABLES, DEFAULT_BUSINESS_CONFIG } from '../data';
 import { NotificationMsg } from '../components/NotificationToast';
 import { useMenuQuery, useTablesQuery, useBusinessConfigQuery } from '../lib/queries';
+import { useAddReservation, useUpdateReservationStatus, useUpdateMenuProduct } from '../lib/mutations';
 
 export interface ReservationContextType {
   reservations: Reservation[];
@@ -13,9 +14,9 @@ export interface ReservationContextType {
   setLanguage: (lang: Language) => void;
   activeView: 'home' | 'menu' | 'booking' | 'admin';
   setActiveView: (view: 'home' | 'menu' | 'booking' | 'admin') => void;
-  addReservation: (res: Omit<Reservation, 'id' | 'timestamp'>) => Reservation;
-  updateReservationStatus: (id: string, status: KanbanStage) => void;
-  updateMenuProduct: (product: MenuItem) => void;
+  addReservation: (res: Omit<Reservation, 'id' | 'timestamp'>) => Promise<Reservation>;
+  updateReservationStatus: (id: string, status: KanbanStage) => Promise<void>;
+  updateMenuProduct: (product: MenuItem) => Promise<void>;
   notifications: NotificationMsg[];
   addNotification: (title: string, message: string, type: 'success' | 'info' | 'alert') => void;
   dismissNotification: (id: string) => void;
@@ -134,30 +135,78 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
     }
   }, [reservations]);
 
-  // Operations
-  const addReservation = (res: Omit<Reservation, 'id' | 'timestamp'>): Reservation => {
-    const id = `RES-${Math.floor(100000 + Math.random() * 900000)}`;
-    const timestamp = new Date().toISOString();
-    const newRes: Reservation = {
+  // Operations (PR#3: backed by API mutations; keep local cache for optimistic UI)
+  const addReservationMutation = useAddReservation();
+  const updateStatusMutation = useUpdateReservationStatus();
+  const updateMenuMutation = useUpdateMenuProduct();
+
+  const addReservation = async (res: Omit<Reservation, 'id' | 'timestamp'>): Promise<Reservation> => {
+    const optimistic: Reservation = {
       ...res,
-      id,
-      timestamp
+      id: `RES-${Math.floor(100000 + Math.random() * 900000)}`,
+      timestamp: new Date().toISOString()
     };
-    setReservations((prev) => [newRes, ...prev]);
-    return newRes;
+    setReservations((prev) => [optimistic, ...prev]);
+    try {
+      const result = await addReservationMutation.mutateAsync({
+        customerName: res.customerName,
+        customerEmail: res.customerEmail,
+        customerPhone: res.customerPhone,
+        date: res.date,
+        timeSlot: res.timeSlot,
+        tableId: res.tableId,
+        area: res.area,
+        guestsCount: res.guestsCount,
+        notes: res.notes,
+        selectedOrderItems: res.selectedOrderItems,
+        paymentStatus: res.paymentStatus,
+        paymentReference: res.paymentReference,
+        status: res.status
+      });
+      // Replace optimistic row with server-confirmed one
+      setReservations((prev) => prev.map((r) => (r.id === optimistic.id ? { ...r, id: result.id } : r)));
+      addNotification(
+        'Reservación creada',
+        `ID ${result.id} confirmada.`,
+        'success'
+      );
+      return { ...optimistic, id: result.id };
+    } catch (e) {
+      setReservations((prev) => prev.filter((r) => r.id !== optimistic.id));
+      addNotification(
+        'Error al reservar',
+        e instanceof Error ? e.message : 'Error desconocido',
+        'alert'
+      );
+      throw e;
+    }
   };
 
-  const updateReservationStatus = (id: string, status: KanbanStage) => {
-    setReservations((prev) =>
-      prev.map((res) => (res.id === id ? { ...res, status } : res))
-    );
+  const updateReservationStatus = async (id: string, status: KanbanStage): Promise<void> => {
+    const previous = reservations;
+    setReservations((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+    try {
+      await updateStatusMutation.mutateAsync({ id, status });
+    } catch (e) {
+      setReservations(previous);
+      addNotification(
+        'Error al actualizar estado',
+        e instanceof Error ? e.message : 'Error desconocido',
+        'alert'
+      );
+    }
   };
 
-  const updateMenuProduct = (product: MenuItem) => {
-    // PR#3 will turn this into a useMutation that invalidates the menu query.
-    setMenuProducts((prev) =>
-      prev.map((p) => (p.id === product.id ? product : p))
-    );
+  const updateMenuProduct = async (product: MenuItem): Promise<void> => {
+    try {
+      await updateMenuMutation.mutateAsync(product);
+    } catch (e) {
+      addNotification(
+        'Error al actualizar producto',
+        e instanceof Error ? e.message : 'Error desconocido',
+        'alert'
+      );
+    }
   };
 
   // Notification actions
