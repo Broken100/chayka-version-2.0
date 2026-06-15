@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api';
-import type { MenuItem, ReservationTable, BusinessConfig } from '../types';
+import type { MenuItem, ReservationTable, Reservation, BusinessConfig } from '../types';
 
 export const queryKeys = {
   menu: ['menu'] as const,
   tables: ['tables'] as const,
-  businessConfig: ['business-config'] as const
+  businessConfig: ['business-config'] as const,
+  reservations: ['reservations'] as const
 };
 
 /**
@@ -127,6 +128,31 @@ export function useBusinessConfigQuery() {
 }
 
 export { ApiError };
+
+export interface ReservationRow {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  date: string;
+  timeSlot: string;
+  tableId: string;
+  area: string;
+  guestsCount: number;
+  status: string;
+  paymentStatus: string;
+  paymentReference: string | null;
+  notes: string | null;
+  selectedOrderItems: Array<{ productId: string; name: string; price: number; quantity: number }> | null;
+  timestamp: string;
+}
+
+export function useReservationsQuery() {
+  return useQuery<ReservationRow[]>({
+    queryKey: queryKeys.reservations,
+    queryFn: () => api.get<ReservationRow[]>('/reservations'),
+  });
+}
 
 export interface AdminSession {
   authenticated: boolean;
