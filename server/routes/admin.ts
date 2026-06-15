@@ -6,13 +6,21 @@ import {
   updateTableSchema,
   updateBusinessConfigSchema,
   updateReservationStatusSchema,
-  adminLoginSchema
+  adminLoginSchema,
+  createMenuItemSchema
 } from '../lib/validation.js';
 import { requireAdmin, SESSION_COOKIE } from '../lib/auth.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 
 const router = Router();
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production'
+};
+const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function asyncHandler(
   fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>
@@ -35,20 +43,18 @@ router.post(
 
     const passwords = (process.env.ADMIN_PASSWORDS ?? '').split(',').map((p) => p.trim());
     if (!passwords.includes(parsed.data.password)) {
-      res.status(401).json({ error: 'Invalid password' });
+      res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
 
     const token = randomUUID();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_MS);
 
     await db.insert(adminSessions).values({ token, expiresAt });
 
     res.cookie(SESSION_COOKIE, token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      secure: process.env.NODE_ENV === 'production'
+      ...COOKIE_OPTIONS,
+      maxAge: SESSION_MAX_AGE_MS
     });
 
     res.json({ ok: true, expiresAt: expiresAt.toISOString() });
@@ -62,7 +68,7 @@ router.post(
     if (token) {
       await db.delete(adminSessions).where(eq(adminSessions.token, token));
     }
-    res.clearCookie(SESSION_COOKIE);
+    res.clearCookie(SESSION_COOKIE, COOKIE_OPTIONS);
     res.json({ ok: true });
   })
 );
@@ -99,6 +105,48 @@ router.get(
 router.use(requireAdmin);
 
 // Menu items
+router.post(
+  '/menu',
+  asyncHandler(async (req, res) => {
+    const parsed = createMenuItemSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
+      return;
+    }
+    const data = parsed.data;
+    const existing = await db
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(eq(menuItems.id, data.id))
+      .limit(1);
+    if (existing.length > 0) {
+      res.status(409).json({ error: 'Menu id already exists' });
+      return;
+    }
+    const inserted = await db
+      .insert(menuItems)
+      .values({
+        id: data.id,
+        nameEs: data.name.es,
+        nameEn: data.name.en,
+        descriptionEs: data.description?.es ?? null,
+        descriptionEn: data.description?.en ?? null,
+        price: String(data.price),
+        category: data.category,
+        image: data.image ?? null,
+        fallbackImage: data.fallbackImage ?? null,
+        active: data.active ?? true,
+        ingredientsEs: data.ingredients?.es ?? null,
+        ingredientsEn: data.ingredients?.en ?? null,
+        isSpecial: data.isSpecial ?? false,
+        preparationTime: data.preparationTime ?? null
+      } as never)
+      .returning();
+    res.status(201).json(inserted[0]);
+  })
+);
+
 router.put(
   '/menu/:id',
   asyncHandler(async (req, res) => {
@@ -128,6 +176,21 @@ router.put(
       return;
     }
     res.json(updated[0]);
+  })
+);
+
+router.delete(
+  '/menu/:id',
+  asyncHandler(async (req, res) => {
+    const deleted = await db
+      .delete(menuItems)
+      .where(eq(menuItems.id, req.params.id))
+      .returning({ id: menuItems.id });
+    if (deleted.length === 0) {
+      res.status(404).json({ error: 'Menu item not found' });
+      return;
+    }
+    res.status(204).end();
   })
 );
 
