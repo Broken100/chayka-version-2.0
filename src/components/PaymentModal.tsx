@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CreditCard, Check, ShieldCheck, X, Sparkles, AlertOctagon, RefreshCw } from 'lucide-react';
 import { useReservation } from '../context/ReservationContext';
+import { useSimulatePayment } from '../lib/mutations';
 import { t } from '../utils/translations';
 
 interface PaymentModalProps {
@@ -23,12 +24,12 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, amount, descr
   const [cardName, setCardName] = useState('');
   const [expiry, setExpiry] = useState('');
   const [cvv, setCvv] = useState('');
-  const [isPaying, setIsPaying] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'failed'>('idle');
   const [errors, setErrors] = useState<{ cardName?: string; cardNumber?: string; expiry?: string; cvv?: string }>({});
   const [method, setMethod] = useState<'card' | 'transfer' | 'cash'>('card');
   const [transferRef, setTransferRef] = useState('');
   const [transferError, setTransferError] = useState('');
+  const paymentMutation = useSimulatePayment();
 
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
@@ -97,58 +98,34 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, amount, descr
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSimulatePayment = (outcome: 'success' | 'failed') => {
-    if (!validate()) return;
-
-    setIsPaying(true);
-    // Simulate high class payment loading
-    setTimeout(() => {
-      setIsPaying(false);
-      if (outcome === 'success') {
-        setStatus('success');
-        setTimeout(() => {
-          const mockRef = 'PAY-' + Math.random().toString(36).substring(2, 11).toUpperCase();
-          onSuccess(mockRef);
-          // Reset state
-          setStatus('idle');
-          setCardNumber('');
-          setCardName('');
-          setExpiry('');
-          setCvv('');
-        }, 1500);
-      } else {
-        setStatus('failed');
-      }
-    }, 1500);
-  };
-
-  const handleSimulateTransferPayment = () => {
-    if (!transferRef.trim()) {
+  const handlePay = () => {
+    if (method === 'card' && !validate()) return;
+    if (method === 'transfer' && !transferRef.trim()) {
       setTransferError(language === 'es' ? 'El número de referencia es obligatorio' : 'Reference number is required');
       return;
     }
-    setIsPaying(true);
-    setTimeout(() => {
-      setIsPaying(false);
-      setStatus('success');
-      setTimeout(() => {
-        onSuccess(`TRF-${transferRef.toUpperCase()}`);
-        setStatus('idle');
-        setTransferRef('');
-      }, 1500);
-    }, 1500);
-  };
 
-  const handleSimulateCashPayment = () => {
-    setIsPaying(true);
-    setTimeout(() => {
-      setIsPaying(false);
-      setStatus('success');
-      setTimeout(() => {
-        onSuccess('EFECTIVO-LOCAL');
-        setStatus('idle');
-      }, 1500);
-    }, 1500);
+    paymentMutation.mutate(
+      { method, amount, reference: method === 'transfer' ? transferRef : cardNumber.replace(/\s+/g, '') },
+      {
+        onSuccess: (result) => {
+          if (result.status === 'failed') {
+            setStatus('failed');
+          } else {
+            setStatus('success');
+            setTimeout(() => {
+              onSuccess(result.reference ?? '');
+              setStatus('idle');
+              setCardNumber(''); setCardName(''); setExpiry(''); setCvv('');
+              setTransferRef('');
+            }, 1500);
+          }
+        },
+        onError: () => {
+          setStatus('failed');
+        }
+      }
+    );
   };
 
   if (!isOpen) return null;
@@ -354,41 +331,22 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, amount, descr
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 mt-4">
-                    <button
-                      type="button"
-                      disabled={isPaying}
-                      onClick={() => handleSimulatePayment('success')}
-                      className="bg-emerald-800 text-editorial-bg hover:bg-emerald-700 disabled:opacity-50 font-bold py-3 px-2 rounded-none flex items-center justify-center gap-1.5 transition-all cursor-pointer uppercase tracking-widest text-[10px] border border-emerald-800"
-                      id="payment-success-btn"
-                    >
-                      {isPaying ? (
-                        <span className="animate-pulse">{language === 'es' ? 'Procesando...' : 'Processing...'}</span>
-                      ) : (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>{t('payment.payButton', language)}</span>
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isPaying}
-                      onClick={() => handleSimulatePayment('failed')}
-                      className="bg-rose-800 text-editorial-bg hover:bg-rose-700 disabled:opacity-50 font-bold py-3 px-2 rounded-none flex items-center justify-center gap-1.5 transition-all cursor-pointer uppercase tracking-widest text-[10px] border border-rose-800"
-                      id="payment-fail-btn"
-                    >
-                      {isPaying ? (
-                        <span className="animate-pulse">{language === 'es' ? 'Procesando...' : 'Processing...'}</span>
-                      ) : (
-                        <>
-                          <X className="w-3.5 h-3.5" />
-                          <span>{t('payment.failButton', language)}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    disabled={paymentMutation.isPending}
+                    onClick={handlePay}
+                    className="w-full bg-emerald-800 text-editorial-bg hover:bg-emerald-700 disabled:opacity-50 font-bold py-3.5 px-2 rounded-none flex items-center justify-center gap-1.5 transition-all cursor-pointer uppercase tracking-widest text-[10px] border border-emerald-800"
+                    id="payment-success-btn"
+                  >
+                    {paymentMutation.isPending ? (
+                      <span className="animate-pulse">{language === 'es' ? 'Procesando...' : 'Processing...'}</span>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>{t('payment.payButton', language)}</span>
+                      </>
+                    )}
+                  </button>
 
                   <button
                     type="button"
@@ -464,12 +422,12 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, amount, descr
 
                 <button
                   type="button"
-                  disabled={isPaying}
-                  onClick={handleSimulateTransferPayment}
+                  disabled={paymentMutation.isPending}
+                  onClick={handlePay}
                   className="w-full bg-emerald-800 text-editorial-bg hover:bg-emerald-700 disabled:opacity-50 font-bold py-3.5 px-2 rounded-none flex items-center justify-center gap-1.5 transition-all cursor-pointer uppercase tracking-widest text-[10px] border border-emerald-800"
                   id="payment-confirm-transfer-btn"
                 >
-                  {isPaying ? (
+                  {paymentMutation.isPending ? (
                     <span className="animate-pulse">{language === 'es' ? 'Procesando...' : 'Processing...'}</span>
                   ) : (
                     <>
@@ -509,12 +467,12 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, amount, descr
 
                 <button
                   type="button"
-                  disabled={isPaying}
-                  onClick={handleSimulateCashPayment}
+                  disabled={paymentMutation.isPending}
+                  onClick={handlePay}
                   className="w-full bg-emerald-800 text-editorial-bg hover:bg-emerald-700 disabled:opacity-50 font-bold py-3.5 px-2 rounded-none flex items-center justify-center gap-1.5 transition-all cursor-pointer uppercase tracking-widest text-[10px] border border-emerald-800"
                   id="payment-confirm-cash-btn"
                 >
-                  {isPaying ? (
+                  {paymentMutation.isPending ? (
                     <span className="animate-pulse">{language === 'es' ? 'Confirmando...' : 'Confirming...'}</span>
                   ) : (
                     <>

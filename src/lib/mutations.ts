@@ -173,3 +173,22 @@ export function useDeleteMenuProduct() {
     }
   });
 }
+
+export interface SimulatePaymentInput {
+  method: 'card' | 'transfer' | 'cash';
+  amount: number;
+  reference?: string;
+}
+
+export interface SimulatePaymentResult {
+  status: 'success' | 'failed';
+  reference?: string;
+  reason?: string;
+}
+
+export function useSimulatePayment() {
+  return useMutation({
+    mutationFn: (input: SimulatePaymentInput) =>
+      api.post<SimulatePaymentResult>('/payments/simulate', input)
+  });
+}

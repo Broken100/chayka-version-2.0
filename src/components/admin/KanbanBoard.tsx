@@ -3,6 +3,8 @@ import { Reservation, KanbanStage } from '../../types';
 import { useReservation } from '../../context/ReservationContext';
 import { useReservationsQuery } from '../../lib/queries';
 import { useUpdateReservationStatus } from '../../lib/mutations';
+import { SkeletonCard } from '../Skeleton';
+import QueryError from '../QueryError';
 import { t } from '../../utils/translations';
 import { 
   User, 
@@ -23,6 +25,22 @@ export default function KanbanBoard() {
   const reservationsQuery = useReservationsQuery();
   const updateStatusMutation = useUpdateReservationStatus();
   const reservations: Reservation[] = (reservationsQuery.data ?? []) as unknown as Reservation[];
+
+  if (reservationsQuery.isLoading) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex flex-col gap-3">
+            {[1, 2, 3].map((j) => <SkeletonCard key={j} />)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (reservationsQuery.isError) {
+    return <QueryError message={reservationsQuery.error?.message} onRetry={() => reservationsQuery.refetch()} />;
+  }
 
   // Keep track of which column is being hovered during a drag operation
   const [activeDragOverCol, setActiveDragOverCol] = useState<KanbanStage | null>(null);
