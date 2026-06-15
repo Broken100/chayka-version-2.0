@@ -150,7 +150,7 @@ export interface ReservationRow {
 export function useReservationsQuery() {
   return useQuery<ReservationRow[]>({
     queryKey: queryKeys.reservations,
-    queryFn: () => api.get<ReservationRow[]>('/reservations'),
+    queryFn: () => api.get<ReservationRow[]>('/admin/reservations'),
   });
 }
 

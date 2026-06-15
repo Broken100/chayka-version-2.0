@@ -29,6 +29,7 @@ describe('AdminPanel', () => {
       if (path === '/tables') return [];
       if (path === '/business-config') return {};
       if (path === '/reservations') return [];
+      if (path === '/admin/reservations') return [];
       throw new Error(`Unhandled mock path: ${path}`);
     });
 
