@@ -79,3 +79,30 @@ export const simulatePaymentSchema = z.object({
 export const adminLoginSchema = z.object({
   password: z.string().min(1, 'password is required')
 });
+
+export const createMenuItemSchema = z.object({
+  id: z.string().min(1, 'id is required'),
+  name: z.object({
+    es: z.string().min(1, 'name.es is required'),
+    en: z.string().min(1, 'name.en is required')
+  }),
+  price: z.number().positive('price must be positive'),
+  category: z.string().min(1, 'category is required'),
+  description: z
+    .object({
+      es: z.string().optional(),
+      en: z.string().optional()
+    })
+    .optional(),
+  image: z.string().optional(),
+  fallbackImage: z.string().optional(),
+  active: z.boolean().optional(),
+  ingredients: z
+    .object({
+      es: z.array(z.string()).optional(),
+      en: z.array(z.string()).optional()
+    })
+    .optional(),
+  isSpecial: z.boolean().optional(),
+  preparationTime: z.number().int().nonnegative().optional()
+});
