@@ -69,6 +69,16 @@ export const mockApi = {
       return { ok: true, expiresAt: new Date(Date.now() + 86400000).toISOString() };
     }
     if (path === '/admin/logout') return { ok: true };
+    if (path === '/payments/simulate') {
+      const { method, reference } = body as { method: string; reference?: string };
+      if (method === 'card' && reference?.startsWith('0000')) {
+        return { status: 'failed', reason: 'Card declined' };
+      }
+      if (method === 'transfer' && !reference) {
+        throw new ApiError(400, { error: 'reference is required' }, 'reference is required');
+      }
+      return { status: 'success', reference: 'PAY-MOCK123' };
+    }
     return {};
   }),
   put: vi.fn(),
