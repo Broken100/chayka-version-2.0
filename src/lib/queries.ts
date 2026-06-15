@@ -139,7 +139,8 @@ export function useAdminAuth() {
     queryKey: ['admin', 'me'],
     queryFn: () => api.get<AdminSession>('/admin/me'),
     retry: false,
-    staleTime: Infinity // sessions are invalidated explicitly
+    staleTime: 5 * 60_000, // 5 minutes, per design
+    refetchOnWindowFocus: true
   });
 }
 
