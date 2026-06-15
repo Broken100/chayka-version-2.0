@@ -26,6 +26,10 @@ import {
   Receipt
 } from 'lucide-react';
 import PaymentModal from './PaymentModal';
+import TableSelector from './booking/TableSelector';
+import CheckoutForm from './booking/CheckoutForm';
+import { useReservation } from '../context/ReservationContext';
+import { t } from '../utils/translations';
 
 interface BookingSectionProps {
   businessConfig: BusinessConfig;
@@ -69,6 +73,7 @@ export default function BookingSection({
   onReservationComplete,
   existingReservations
 }: BookingSectionProps) {
+  const { language } = useReservation();
   const [step, setStep] = useState<number>(1); // Step 1: Date/Time/Pax, 2: Area & Table Selection, 3: Optional Pre-orders, 4: Receipt/Finalize
   const [date, setDate] = useState<string>('');
   const [timeSlot, setTimeSlot] = useState<string>('');
@@ -172,9 +177,8 @@ export default function BookingSection({
   };
 
   // Step 3 leads to user personal fields or payment triggers
-  const handleProceedToPayment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customerName || !customerEmail || !customerPhone) return;
+  const handleProceedToPayment = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
 
     // Trigger payment modal directly if we need to pay, or bypass
     if (totalToPay > 0) {
@@ -224,39 +228,87 @@ export default function BookingSection({
     setStep(4); // Move to success invoice view
   };
 
+  // Helper to get translated Area label
+  const getAreaLabel = (area: TableArea) => {
+    return t(`booking.tableSelector.areas.${area}`, language);
+  };
+
   // Generate WhatsApp details text
   const getWhatsAppLink = () => {
     if (!completedBooking) return '#';
-    const tableName = selectedTable?.name || completedBooking.tableId;
-    const areaName = AREA_LABELS[completedBooking.area]?.label || completedBooking.area;
+    const tableName = selectedTable
+      ? (selectedTable.name[language] || selectedTable.name.es)
+      : completedBooking.tableId;
+    const areaName = getAreaLabel(completedBooking.area) || completedBooking.area;
 
-    let msg = `*📍 NUEVA RESERVA - CHAYKA COFFEE*\n`;
-    msg += `------------------------------------\n`;
-    msg += `*Cliente:* ${completedBooking.customerName}\n`;
-    msg += `*Fecha:* ${completedBooking.date}\n`;
-    msg += `*Hora:* ${completedBooking.timeSlot}\n`;
-    msg += `*Lugar:* ${areaName}\n`;
-    msg += `*Mesa:* ${tableName}\n`;
-    msg += `*Personas:* ${completedBooking.guestsCount} pers.\n`;
-    msg += `*Estado de Pago:* ${completedBooking.paymentStatus === 'simulated_paid' ? '✅ PAGADO ONLINE' : '☕ PAGO EN COCAL'}\n`;
-    if (completedBooking.paymentReference) {
-      msg += `*Ref Transacción (Simulada):* ${completedBooking.paymentReference}\n`;
+    const ref = completedBooking.paymentReference || '';
+    let payMethod = '';
+    if (language === 'es') {
+      if (ref.startsWith('TRF-')) payMethod = `💸 Transferencia (Ref: ${ref.replace('TRF-', '')})`;
+      else if (ref === 'EFECTIVO-LOCAL') payMethod = `💵 Efectivo (A abonar en local)`;
+      else if (ref.startsWith('PAY-')) payMethod = `💳 Tarjeta de Crédito/Débito`;
+      else payMethod = `☕ Pago en local`;
+    } else {
+      if (ref.startsWith('TRF-')) payMethod = `💸 Bank Transfer (Ref: ${ref.replace('TRF-', '')})`;
+      else if (ref === 'EFECTIVO-LOCAL') payMethod = `💵 Cash (Pay at store)`;
+      else if (ref.startsWith('PAY-')) payMethod = `💳 Credit/Debit Card`;
+      else payMethod = `☕ Pay at shop`;
     }
-
-    if (preorderedItemsList.length > 0) {
-      msg += `\n*🛒 PRE-ORDEN DIGITAL:*\n`;
-      preorderedItemsList.forEach((item) => {
-        msg += `- ${item.quantity}x ${item.product?.name} ($${(item.product?.price || 0).toFixed(2)} c/u)\n`;
-      });
-      msg += `*Total Pre-Orden:* $${preordersTotal.toFixed(2)} USD\n`;
+    
+    let msg = '';
+    if (language === 'es') {
+      msg = `*📍 NUEVA RESERVA - CHAYKA COFFEE*\n`;
+      msg += `------------------------------------\n`;
+      msg += `*Cliente:* ${completedBooking.customerName}\n`;
+      msg += `*Fecha:* ${completedBooking.date}\n`;
+      msg += `*Hora:* ${completedBooking.timeSlot}\n`;
+      msg += `*Lugar:* ${areaName}\n`;
+      msg += `*Mesa:* ${tableName}\n`;
+      msg += `*Personas:* ${completedBooking.guestsCount} pers.\n`;
+      msg += `*Estado / Método:* ${payMethod}\n`;
+  
+      if (preorderedItemsList.length > 0) {
+        msg += `\n*🛒 PRE-ORDEN DIGITAL:*\n`;
+        preorderedItemsList.forEach((item) => {
+          const nameResolved = item.product?.name[language] || item.product?.name.es;
+          msg += `- ${item.quantity}x ${nameResolved} ($${(item.product?.price || 0).toFixed(2)} c/u)\n`;
+        });
+        msg += `*Total Pre-Orden:* $${preordersTotal.toFixed(2)} USD\n`;
+      }
+  
+      if (completedBooking.notes) {
+        msg += `\n*Notas Especiales:* _${completedBooking.notes}_\n`;
+      }
+  
+      msg += `------------------------------------\n`;
+      msg += `¡Hola Chayka Coffee! He completado mi reserva y me gustaría confirmar mi llegada. Nos vemos pronto en Otavalo.`;
+    } else {
+      msg = `*📍 NEW RESERVATION - CHAYKA COFFEE*\n`;
+      msg += `------------------------------------\n`;
+      msg += `*Customer:* ${completedBooking.customerName}\n`;
+      msg += `*Date:* ${completedBooking.date}\n`;
+      msg += `*Time:* ${completedBooking.timeSlot}\n`;
+      msg += `*Area:* ${areaName}\n`;
+      msg += `*Table:* ${tableName}\n`;
+      msg += `*Guests:* ${completedBooking.guestsCount} people\n`;
+      msg += `*Status / Method:* ${payMethod}\n`;
+  
+      if (preorderedItemsList.length > 0) {
+        msg += `\n*🛒 DIGITAL PRE-ORDER:*\n`;
+        preorderedItemsList.forEach((item) => {
+          const nameResolved = item.product?.name[language] || item.product?.name.en;
+          msg += `- ${item.quantity}x ${nameResolved} ($${(item.product?.price || 0).toFixed(2)} each)\n`;
+        });
+        msg += `*Pre-Order Total:* $${preordersTotal.toFixed(2)} USD\n`;
+      }
+  
+      if (completedBooking.notes) {
+        msg += `\n*Special Notes:* _${completedBooking.notes}_\n`;
+      }
+  
+      msg += `------------------------------------\n`;
+      msg += `Hello Chayka Coffee! I have completed my booking and would like to confirm my arrival. See you soon in Otavalo.`;
     }
-
-    if (completedBooking.notes) {
-      msg += `\n*Notas Especiales:* _${completedBooking.notes}_\n`;
-    }
-
-    msg += `------------------------------------\n`;
-    msg += `¡Hola Chayka Coffee! He completado mi reserva y me gustaría confirmar mi llegada. Nos vemos pronto en Otavalo.`;
 
     const encodedText = encodeURIComponent(msg);
     // Replace and format clean international number
@@ -266,29 +318,63 @@ export default function BookingSection({
 
   const copyReceiptToClipboard = () => {
     if (!completedBooking) return;
-    const tableName = selectedTable?.name || completedBooking.tableId;
-    const areaName = AREA_LABELS[completedBooking.area]?.label || completedBooking.area;
+    const tableName = selectedTable
+      ? (selectedTable.name[language] || selectedTable.name.es)
+      : completedBooking.tableId;
+    const areaName = getAreaLabel(completedBooking.area) || completedBooking.area;
 
-    let text = `CÓDIGO DE RESERVACIÓN: ${completedBooking.id}\n`;
-    text += `Establecimiento: Chayka Coffee\n`;
-    text += `Cliente: ${completedBooking.customerName}\n`;
-    text += `Fecha: ${completedBooking.date} a las ${completedBooking.timeSlot}\n`;
-    text += `Ubicación: ${areaName} - ${tableName}\n`;
-    text += `Personas: ${completedBooking.guestsCount}\n`;
-    text += `Pago: ${completedBooking.paymentStatus === 'simulated_paid' ? 'Confirmado Online' : 'Por cancelar en cafetería'}\n`;
-    if (completedBooking.paymentReference) {
-      text += `ID Transacción: ${completedBooking.paymentReference}\n`;
+    const ref = completedBooking.paymentReference || '';
+    let payMethod = '';
+    if (language === 'es') {
+      if (ref.startsWith('TRF-')) payMethod = `Transferencia (Ref: ${ref.replace('TRF-', '')})`;
+      else if (ref === 'EFECTIVO-LOCAL') payMethod = `Efectivo (A abonar en local)`;
+      else if (ref.startsWith('PAY-')) payMethod = `Tarjeta de Crédito/Débito`;
+      else payMethod = `Pago en local`;
+    } else {
+      if (ref.startsWith('TRF-')) payMethod = `Bank Transfer (Ref: ${ref.replace('TRF-', '')})`;
+      else if (ref === 'EFECTIVO-LOCAL') payMethod = `Cash (Pay at store)`;
+      else if (ref.startsWith('PAY-')) payMethod = `Credit/Debit Card`;
+      else payMethod = `Pay at shop`;
     }
-    if (preorderedItemsList.length > 0) {
-      text += `\nPre-orden: \n`;
-      preorderedItemsList.forEach((item) => {
-        text += `- ${item.quantity}x ${item.product?.name}\n`;
-      });
-      text += `Total Pre-Orden: $${preordersTotal.toFixed(2)} USD\n`;
+    
+    let text = '';
+
+    if (language === 'es') {
+      text = `CÓDIGO DE RESERVACIÓN: ${completedBooking.id}\n`;
+      text += `Establecimiento: Chayka Coffee\n`;
+      text += `Cliente: ${completedBooking.customerName}\n`;
+      text += `Fecha: ${completedBooking.date} a las ${completedBooking.timeSlot}\n`;
+      text += `Ubicación: ${areaName} - ${tableName}\n`;
+      text += `Personas: ${completedBooking.guestsCount}\n`;
+      text += `Pago / Método: ${payMethod}\n`;
+      if (preorderedItemsList.length > 0) {
+        text += `\nPre-orden: \n`;
+        preorderedItemsList.forEach((item) => {
+          const nameResolved = item.product?.name[language] || item.product?.name.es;
+          text += `- ${item.quantity}x ${nameResolved}\n`;
+        });
+        text += `Total Pre-Orden: $${preordersTotal.toFixed(2)} USD\n`;
+      }
+    } else {
+      text = `RESERVATION CODE: ${completedBooking.id}\n`;
+      text += `Establishment: Chayka Coffee\n`;
+      text += `Customer: ${completedBooking.customerName}\n`;
+      text += `Date: ${completedBooking.date} at ${completedBooking.timeSlot}\n`;
+      text += `Location: ${areaName} - ${tableName}\n`;
+      text += `Guests: ${completedBooking.guestsCount}\n`;
+      text += `Payment / Method: ${payMethod}\n`;
+      if (preorderedItemsList.length > 0) {
+        text += `\nPre-order: \n`;
+        preorderedItemsList.forEach((item) => {
+          const nameResolved = item.product?.name[language] || item.product?.name.en;
+          text += `- ${item.quantity}x ${nameResolved}\n`;
+        });
+        text += `Pre-order Total: $${preordersTotal.toFixed(2)} USD\n`;
+      }
     }
 
     navigator.clipboard.writeText(text);
-    alert('¡Recibo copiado al portapapeles! Listo para enviar.');
+    alert(language === 'es' ? '¡Recibo copiado al portapapeles! Listo para enviar.' : 'Receipt copied to clipboard! Ready to send.');
   };
 
   return (
@@ -303,9 +389,9 @@ export default function BookingSection({
           />
 
           {[
-            { num: 1, label: 'Fecha y Hora' },
-            { num: 2, label: 'Elegir Espacio' },
-            { num: 3, label: 'Pre-órdenes & Pago' }
+            { num: 1, label: language === 'es' ? 'Fecha y Hora' : 'Date & Time' },
+            { num: 2, label: language === 'es' ? 'Elegir Espacio' : 'Choose Space' },
+            { num: 3, label: language === 'es' ? 'Pre-órdenes & Pago' : 'Pre-orders & Payment' }
           ].map((s) => (
             <div key={s.num} className="flex flex-col items-center">
               <div
@@ -341,10 +427,16 @@ export default function BookingSection({
             id="booking-step-1"
           >
             <div className="text-center max-w-md mx-auto">
-              <span className="text-editorial-charcoal/60 font-bold text-[10px] uppercase tracking-[0.25em]">Planifica Tu Visita</span>
-              <h3 className="text-2xl font-serif font-bold italic text-editorial-charcoal mt-1">Elige Fecha y Cantidad</h3>
+              <span className="text-editorial-charcoal/60 font-bold text-[10px] uppercase tracking-[0.25em]">
+                {language === 'es' ? 'Planifica Tu Visita' : 'Plan Your Visit'}
+              </span>
+              <h3 className="text-2xl font-serif font-bold italic text-editorial-charcoal mt-1">
+                {language === 'es' ? 'Elige Fecha y Cantidad' : 'Choose Date & Quantity'}
+              </h3>
               <p className="text-editorial-charcoal/80 text-xs mt-1">
-                La Cascada de Peguche es maravillosa de día y pacífica de noche. Elige el tiempo perfecto para tu mesa.
+                {language === 'es'
+                  ? 'La Cascada de Peguche es maravillosa de día y pacífica de noche. Elige el tiempo perfecto para tu mesa.'
+                  : 'The Peguche Waterfall is wonderful by day and peaceful by night. Choose the perfect time for your table.'}
               </p>
             </div>
 
@@ -353,7 +445,7 @@ export default function BookingSection({
                 <div>
                   <label className="block text-[10px] font-bold text-editorial-charcoal/60 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                     <CalendarIcon className="w-3.5 h-3.5 text-editorial-charcoal" />
-                    <span>Seleccionar Fecha</span>
+                    <span>{language === 'es' ? 'Seleccionar Fecha' : 'Select Date'}</span>
                   </label>
                   <input
                     type="date"
@@ -369,31 +461,33 @@ export default function BookingSection({
                 <div>
                   <label className="block text-[10px] font-bold text-editorial-charcoal/60 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-editorial-charcoal" />
-                    <span>Bloque Horario</span>
+                    <span>{language === 'es' ? 'Bloque Horario' : 'Time Slot'}</span>
                   </label>
                   <select
-                    value={timeSlot}
-                    required
-                    onChange={(e) => setTimeSlot(e.target.value)}
-                    className="w-full bg-editorial-stone/20 border border-editorial-charcoal/15 rounded-none py-2.5 px-3.5 text-xs text-editorial-charcoal focus:outline-none focus:border-editorial-charcoal font-medium font-mono cursor-pointer"
-                    id="booking-timeslot-select"
-                  >
-                    {businessConfig.timeSlots.map((ts) => (
-                      <option key={ts} value={ts}>
-                        {ts} hs - Acceso de Mesa
-                      </option>
-                    ))}
-                  </select>
+                     value={timeSlot}
+                     required
+                     onChange={(e) => setTimeSlot(e.target.value)}
+                     className="w-full bg-editorial-stone/20 border border-editorial-charcoal/15 rounded-none py-2.5 px-3.5 text-xs text-editorial-charcoal focus:outline-none focus:border-editorial-charcoal font-medium font-mono cursor-pointer"
+                     id="booking-timeslot-select"
+                   >
+                     {businessConfig.timeSlots.map((ts) => (
+                       <option key={ts} value={ts}>
+                         {ts} {language === 'es' ? 'hs - Acceso de Mesa' : 'hrs - Table Access'}
+                       </option>
+                     ))}
+                   </select>
                 </div>
               </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-editorial-charcoal/60 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5 text-editorial-charcoal" />
-                  <span>Número de Visitantes (Adultos y Niños)</span>
+                  <span>{language === 'es' ? 'Número de Visitantes (Adultos y Niños)' : 'Number of Visitors (Adults & Children)'}</span>
                 </label>
                 <div className="flex items-center gap-4 bg-editorial-stone/25 border border-editorial-charcoal/10 p-3 rounded-none justify-between">
-                  <span className="text-xs font-bold text-editorial-charcoal/80">¿Para cuántas personas?</span>
+                  <span className="text-xs font-bold text-editorial-charcoal/80">
+                    {language === 'es' ? '¿Para cuántas personas?' : 'For how many people?'}
+                  </span>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -418,220 +512,45 @@ export default function BookingSection({
                 </div>
               </div>
 
-              <div className="bg-editorial-stone/40 p-3.5 rounded-none border border-editorial-charcoal/10 flex gap-2.5 items-start">
-                <Info className="w-4 h-4 text-editorial-charcoal flex-shrink-0 mt-0.5" />
-                <div className="text-editorial-charcoal/80 text-xs leading-normal font-sans">
-                  <span className="font-bold block text-editorial-charcoal uppercase text-[10px]">Horarios de Reserva</span>
-                  Aceptamos reservas online todos los días. Las mesas de la Terraza Mirador cuentan con un consumo mínimo integrado reembolsable en consumo.
+                <div className="bg-editorial-stone/40 p-3.5 rounded-none border border-editorial-charcoal/10 flex gap-2.5 items-start">
+                  <Info className="w-4 h-4 text-editorial-charcoal flex-shrink-0 mt-0.5" />
+                  <div className="text-editorial-charcoal/80 text-xs leading-normal font-sans">
+                    <span className="font-bold block text-editorial-charcoal uppercase text-[10px]">
+                      {language === 'es' ? 'Horarios de Reserva' : 'Reservation Schedules'}
+                    </span>
+                    {language === 'es'
+                      ? 'Aceptamos reservas online todos los días. Las mesas de la Terraza Mirador cuentan con un consumo mínimo integrado reembolsable en consumo.'
+                      : 'We accept online reservations every day. Lookout Terrace tables have an integrated minimum consumption refundable in consumption.'}
+                  </div>
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                className="w-full bg-editorial-charcoal text-editorial-bg font-bold py-3.5 rounded-none flex items-center justify-center gap-2 hover:bg-editorial-charcoal/90 cursor-pointer shadow-none transition-all uppercase tracking-widest text-xs"
-                id="step-1-submit-btn"
-              >
-                <span>Buscar Espacios Disponibles</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
+                <button
+                  type="submit"
+                  className="w-full bg-editorial-charcoal text-editorial-bg font-bold py-3.5 rounded-none flex items-center justify-center gap-2 hover:bg-editorial-charcoal/90 cursor-pointer shadow-none transition-all uppercase tracking-widest text-xs"
+                  id="step-1-submit-btn"
+                >
+                  <span>{language === 'es' ? 'Buscar Espacios Disponibles' : 'Search Available Spaces'}</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
             </form>
           </motion.div>
         )}
 
         {/* STEP 2: Selection of Area and Table */}
         {step === 2 && (
-          <motion.div
-            key="step2"
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-            className="space-y-6 text-left"
-            id="booking-step-2"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <button
-                onClick={() => setStep(1)}
-                className="text-editorial-charcoal/60 hover:text-editorial-charcoal text-xs font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-                id="back-to-step1"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Volver</span>
-              </button>
-            </div>
-
-            <div className="text-center max-w-md mx-auto">
-              <span className="text-editorial-charcoal/60 font-bold text-[10px] uppercase tracking-[0.25em]">Aventura Visual</span>
-              <h3 className="text-2xl font-serif font-bold italic text-editorial-charcoal mt-1">Nuestros Rincones Mágicos</h3>
-              <p className="text-editorial-charcoal/80 text-xs mt-1">
-                Selecciona la zona que prefieras y escoge tu mesa de la suerte.
-              </p>
-            </div>
-
-            {/* Area Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4" id="area-selection-grid">
-              {(Object.keys(AREA_LABELS) as TableArea[]).map((areaKey) => {
-                const info = AREA_LABELS[areaKey];
-                const isSelected = selectedArea === areaKey;
-                return (
-                  <button
-                    key={areaKey}
-                    onClick={() => {
-                      setSelectedArea(areaKey);
-                      setSelectedTableId(''); // Reset table when changing area
-                    }}
-                    className={`flex flex-col text-left p-4 rounded-none border transition-all cursor-pointer relative overflow-hidden ${
-                      isSelected
-                        ? 'bg-editorial-stone text-editorial-charcoal border-editorial-charcoal ring-[1px] ring-editorial-charcoal'
-                        : 'bg-editorial-bg border-editorial-charcoal/15 hover:bg-editorial-stone/40 hover:border-editorial-charcoal/30'
-                    }`}
-                    id={`area-btn-${areaKey}`}
-                  >
-                    <div className="flex items-center justify-between gap-1 w-full relative z-10">
-                      <span className="text-[9px] uppercase font-bold tracking-widest text-editorial-charcoal/60">Zona</span>
-                      {areaKey === 'waterfall_deck' && <Coffee className="w-3.5 h-3.5 text-editorial-charcoal" />}
-                      {areaKey === 'fireplace_cozy' && <Flame className="w-3.5 h-3.5 text-editorial-charcoal" />}
-                    </div>
-                    <span className="text-sm font-serif font-bold italic text-editorial-charcoal mt-2 relative z-10">{info.label}</span>
-                    <p className="text-[10px] text-editorial-charcoal/70 mt-1 leading-normal relative z-10 font-normal font-sans">{info.desc}</p>
-                    <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5">
-                      <Grid className="w-20 h-20 text-editorial-charcoal" />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Table Selection Title with Selected Date Information */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-t border-editorial-charcoal/15 pt-5 gap-3">
-              <div>
-                <h4 className="text-lg font-serif font-bold text-editorial-charcoal">
-                  Mapeo en: <span className="font-serif italic text-base font-normal">{AREA_LABELS[selectedArea].label}</span>
-                </h4>
-                <p className="text-editorial-charcoal/70 text-xs mt-0.5">
-                  Disponibilidad para el <span className="font-bold text-editorial-charcoal font-mono text-[11px]">{date}</span> en bloque <span className="font-bold text-editorial-charcoal font-mono text-[11px]">{timeSlot} hs</span>
-                </p>
-              </div>
-
-              {/* Legend */}
-              <div className="flex gap-4 text-[10px] font-bold uppercase tracking-wider font-mono">
-                <span className="flex items-center gap-1.5 text-editorial-charcoal/70">
-                  <span className="w-3 h-3 rounded-none bg-editorial-bg border border-editorial-charcoal/20 block" /> Libre
-                </span>
-                <span className="flex items-center gap-1.5 text-rose-700">
-                  <span className="w-3 h-3 rounded-none bg-rose-100 border border-rose-300 block" /> Reservado
-                </span>
-                <span className="flex items-center gap-1.5 text-editorial-charcoal">
-                  <span className="w-3 h-3 rounded-none bg-editorial-charcoal border border-editorial-charcoal block" /> Tu Mesa
-                </span>
-              </div>
-            </div>
-
-            {/* Grid of Tables resembling actual visual spot maps */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="table-selection-grid">
-              {areaTables.map((table) => {
-                const occupies = isTableOccupied(table.id);
-                const isSelected = selectedTableId === table.id;
-                const capacityWarning = guestsCount > table.capacity;
-
-                return (
-                  <div
-                    key={table.id}
-                    onClick={() => !occupies && handleSelectTable(table)}
-                    className={`relative p-5 rounded-none border transition-all flex flex-col justify-between h-44 ${
-                      occupies
-                        ? 'bg-rose-50 border-rose-200 opacity-60 cursor-not-allowed text-rose-800'
-                        : isSelected
-                        ? 'bg-editorial-stone border-editorial-charcoal shadow-sm cursor-pointer'
-                        : 'bg-editorial-bg border-editorial-charcoal/15 hover:border-editorial-charcoal/40 cursor-pointer'
-                    }`}
-                    id={`table-card-${table.id}`}
-                  >
-                    <div>
-                      <div className="flex items-start justify-between">
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-editorial-charcoal/60 font-mono">
-                          {table.id}
-                        </span>
-                        {occupies ? (
-                          <span className="bg-rose-100 text-rose-800 text-[9px] px-2 py-0.5 border border-rose-200 font-bold uppercase tracking-wider rounded-none">
-                            Reservado
-                          </span>
-                        ) : isSelected ? (
-                          <span className="bg-editorial-charcoal text-editorial-bg text-[9px] px-2 py-0.5 border border-editorial-charcoal font-bold uppercase tracking-wider rounded-none animate-pulse">
-                            Seleccionada
-                          </span>
-                        ) : (
-                          <span className="bg-emerald-50 text-emerald-800 text-[9px] px-2 py-0.5 border border-emerald-200 font-bold uppercase tracking-wider rounded-none">
-                            Libre
-                          </span>
-                        )}
-                      </div>
-
-                      <h4 className="font-serif font-bold text-editorial-charcoal text-base mt-2">
-                        {table.name}
-                      </h4>
-                    </div>
-
-                    <div className="space-y-2 border-t border-editorial-charcoal/10 pt-2.5 mt-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-editorial-charcoal/60 flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5 text-editorial-charcoal" /> Capacidad Máxima:
-                        </span>
-                        <span className={`font-mono font-bold ${capacityWarning && !occupies ? 'text-rose-700' : 'text-editorial-charcoal'}`}>
-                          {table.capacity} personas
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-editorial-charcoal/60 flex items-center gap-1">
-                          <DollarSign className="w-3.5 h-3.5 text-editorial-charcoal" /> Consumo Mínimo:
-                        </span>
-                        <span className="font-bold text-editorial-charcoal font-mono">
-                          ${table.minimumConsumption.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Capacity mismatch alarm */}
-                    {capacityWarning && !occupies && (
-                      <div className="absolute inset-x-0 bottom-0 bg-rose-50 border-t border-rose-200 px-3 py-1.5 flex items-center gap-1.5 justify-center">
-                        <AlertTriangle className="w-3.5 h-3.5 text-rose-700 flex-shrink-0" />
-                        <span className="text-[10px] text-rose-800 font-bold leading-none uppercase tracking-wide">
-                          Excede capacidad ({table.capacity}).
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {areaTables.length === 0 && (
-                <p className="col-span-full py-6 text-editorial-charcoal/60 text-sm italic">
-                  Espacio en preparación. Intenta con otra zona.
-                </p>
-              )}
-            </div>
-
-            {/* Error or guide text if no table is selected */}
-            <div className="flex items-center justify-between border-t border-editorial-charcoal/15 pt-5">
-              <span className="text-xs text-editorial-charcoal/60">
-                {!selectedTableId ? (
-                  <span className="text-rose-700 font-semibold select-none">⚠️ Selecciona una mesa de la lista para continuar.</span>
-                ) : (
-                  <span className="font-serif italic font-medium">Gran elección, mesa lista. ¡Continuamos!</span>
-                )}
-              </span>
-
-              <button
-                disabled={!selectedTableId}
-                onClick={handleNextStep2}
-                className="bg-editorial-charcoal text-editorial-bg hover:bg-editorial-charcoal/90 disabled:bg-editorial-stone/40 disabled:text-editorial-charcoal/30 px-6 py-2.5 rounded-none font-bold text-xs uppercase tracking-widest flex items-center gap-1.5 transition-all cursor-pointer border border-editorial-charcoal"
-                id="step-2-next-btn"
-              >
-                <span>Avanzar a Pre-Ordenes</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </motion.div>
+          <TableSelector
+            tables={tables}
+            existingReservations={existingReservations}
+            selectedArea={selectedArea}
+            setSelectedArea={setSelectedArea}
+            selectedTableId={selectedTableId}
+            setSelectedTableId={setSelectedTableId}
+            guestsCount={guestsCount}
+            date={date}
+            timeSlot={timeSlot}
+            onBack={() => setStep(1)}
+            onNext={handleNextStep2}
+          />
         )}
 
         {/* STEP 3: Pre-orders Choice, Payment & User credentials form */}
@@ -651,15 +570,21 @@ export default function BookingSection({
                 id="back-to-step2"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>Volver</span>
+                <span>{language === 'es' ? 'Volver' : 'Back'}</span>
               </button>
             </div>
 
             <div className="text-center max-w-md mx-auto">
-              <span className="text-editorial-charcoal/60 font-bold text-[10px] uppercase tracking-[0.25em] block">Consumo Mínimo Reembolsable</span>
-              <h3 className="text-2xl font-serif font-bold italic text-editorial-charcoal mt-1">Pre-Ordenes de Comida y Formulario</h3>
+              <span className="text-editorial-charcoal/60 font-bold text-[10px] uppercase tracking-[0.25em] block">
+                {language === 'es' ? 'Consumo Mínimo Reembolsable' : 'Refundable Minimum Consumption'}
+              </span>
+              <h3 className="text-2xl font-serif font-bold italic text-editorial-charcoal mt-1">
+                {language === 'es' ? 'Pre-Ordenes de Comida y Formulario' : 'Food Pre-Orders & Form'}
+              </h3>
               <p className="text-editorial-charcoal/80 text-xs mt-1">
-                La mesa seleccionada cuenta con un consumo mínimo de ${tableMinConsumption.toFixed(2)}. ¡Elige delicias para tu llegada!
+                {language === 'es'
+                  ? `La mesa seleccionada cuenta con un consumo mínimo de $${tableMinConsumption.toFixed(2)}. ¡Elige delicias para tu llegada!`
+                  : `The selected table has a minimum consumption of $${tableMinConsumption.toFixed(2)}. Choose delicacies for your arrival!`}
               </p>
             </div>
 
@@ -669,7 +594,11 @@ export default function BookingSection({
                 <div className="bg-editorial-bg border border-editorial-charcoal/15 rounded-none p-4">
                   <h4 className="text-[10px] font-bold text-editorial-charcoal/70 uppercase tracking-widest mb-3 flex items-center gap-1.5 border-b border-editorial-charcoal/10 pb-2">
                     <Coffee className="w-4 h-4 text-editorial-charcoal" />
-                    <span>Añadir Delicias a tu Reserva (Pre-Orden)</span>
+                    <span>
+                      {language === 'es'
+                        ? 'Añadir Delicias a tu Reserva (Pre-Orden)'
+                        : 'Add Delicacies to your Booking (Pre-Order)'}
+                    </span>
                   </h4>
 
                   {/* Little list of items */}
@@ -689,203 +618,164 @@ export default function BookingSection({
                               className="w-10 h-10 rounded-none object-cover flex-shrink-0 border border-editorial-charcoal/10 filter saturate-50"
                               referrerPolicy="no-referrer"
                             />
-                            <div className="min-w-0">
-                              <h5 className="text-xs font-bold text-editorial-charcoal truncate">{p.name}</h5>
-                              <span className="text-[11px] text-editorial-charcoal font-semibold font-serif italic">${p.price.toFixed(2)}</span>
-                            </div>
+                          <div className="min-w-0">
+                            <h5 className="text-xs font-bold text-editorial-charcoal truncate">
+                              {p.name[language] || p.name.es}
+                            </h5>
+                            <span className="text-[11px] text-editorial-charcoal font-semibold font-serif italic">${p.price.toFixed(2)}</span>
                           </div>
+                        </div>
 
-                          <div className="flex items-center gap-2">
-                            {count > 0 ? (
-                              <div className="flex items-center bg-editorial-bg border border-editorial-charcoal/15 rounded-none p-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveFromPreorder(p.id)}
-                                  className="w-6 h-6 bg-editorial-stone hover:bg-editorial-stone-dark text-editorial-charcoal font-black flex items-center justify-center rounded-none cursor-pointer text-xs"
-                                  id={`pre-minus-${p.id}`}
-                                >
-                                  -
-                                </button>
-                                <span className="text-xs text-editorial-charcoal font-bold px-2 font-mono">{count}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddToPreorder(p)}
-                                  className="w-6 h-6 bg-editorial-stone hover:bg-editorial-stone-dark text-editorial-charcoal font-black flex items-center justify-center rounded-none cursor-pointer text-xs"
-                                  id={`pre-plus-${p.id}`}
-                                >
-                                  +
-                                </button>
-                              </div>
-                            ) : (
+                        <div className="flex items-center gap-2">
+                          {count > 0 ? (
+                            <div className="flex items-center bg-editorial-bg border border-editorial-charcoal/15 rounded-none p-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFromPreorder(p.id)}
+                                className="w-6 h-6 bg-editorial-stone hover:bg-editorial-stone-dark text-editorial-charcoal font-black flex items-center justify-center rounded-none cursor-pointer text-xs"
+                                id={`pre-minus-${p.id}`}
+                              >
+                                -
+                              </button>
+                              <span className="text-xs text-editorial-charcoal font-bold px-2 font-mono">{count}</span>
                               <button
                                 type="button"
                                 onClick={() => handleAddToPreorder(p)}
-                                className="bg-editorial-bg border border-editorial-charcoal/25 hover:border-editorial-charcoal hover:bg-editorial-stone text-editorial-charcoal text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-none cursor-pointer transition-colors"
-                                id={`pre-add-${p.id}`}
+                                className="w-6 h-6 bg-editorial-stone hover:bg-editorial-stone-dark text-editorial-charcoal font-black flex items-center justify-center rounded-none cursor-pointer text-xs"
+                                id={`pre-plus-${p.id}`}
                               >
-                                Añadir
+                                +
                               </button>
-                            )}
-                          </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleAddToPreorder(p)}
+                              className="bg-editorial-bg border border-editorial-charcoal/25 hover:border-editorial-charcoal hover:bg-editorial-stone text-editorial-charcoal text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-none cursor-pointer transition-colors"
+                              id={`pre-add-${p.id}`}
+                            >
+                              {language === 'es' ? 'Añadir' : 'Add'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Info and Customer credentials form */}
+              <CheckoutForm
+                customerName={customerName}
+                setCustomerName={setCustomerName}
+                customerPhone={customerPhone}
+                setCustomerPhone={setCustomerPhone}
+                customerEmail={customerEmail}
+                setCustomerEmail={setCustomerEmail}
+                notes={notes}
+                setNotes={setNotes}
+                onSubmit={handleProceedToPayment}
+              />
+              </div>
+
+              {/* Right Column: Checkout Summary Sidebar */}
+              <div className="space-y-4">
+            <div className="bg-editorial-stone/30 border border-editorial-charcoal/15 p-4 rounded-none space-y-4">
+              <h4 className="text-[10px] font-bold text-editorial-charcoal uppercase tracking-widest flex items-center gap-1.5 border-b border-editorial-charcoal/15 pb-2">
+                <Receipt className="w-4 h-4" />
+                <span>{language === 'es' ? 'Resumen de la Cita' : 'Appointment Summary'}</span>
+              </h4>
+
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-editorial-charcoal/60">{language === 'es' ? 'Establecimiento:' : 'Establishment:'}</span>
+                  <span className="text-editorial-charcoal font-bold">{businessConfig.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-editorial-charcoal/60">{language === 'es' ? 'Fecha/Hora:' : 'Date/Time:'}</span>
+                  <span className="text-editorial-charcoal font-bold font-mono">{date} • {timeSlot} {language === 'es' ? 'hs' : 'hrs'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-editorial-charcoal/60">{language === 'es' ? 'Invitados:' : 'Guests:'}</span>
+                  <span className="text-editorial-charcoal font-bold">{guestsCount} {language === 'es' ? 'personas' : 'people'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-editorial-charcoal/60">{language === 'es' ? 'Espacio:' : 'Space:'}</span>
+                  <span className="text-editorial-charcoal font-bold font-serif italic truncate max-w-[150px] block text-right">
+                    {getAreaLabel(selectedArea)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-editorial-charcoal/60">{language === 'es' ? 'Mesa:' : 'Table:'}</span>
+                  <span className="text-editorial-charcoal font-bold truncate max-w-[150px] block text-right">
+                    {selectedTable ? (selectedTable.name[language] || selectedTable.name.es) : selectedTableId}
+                  </span>
+                </div>
+              </div>
+
+              {preorderedItemsList.length > 0 && (
+                <div className="border-t border-editorial-charcoal/10 pt-3 space-y-2">
+                  <h5 className="text-[9px] font-bold text-editorial-charcoal/60 uppercase tracking-widest">
+                    {language === 'es' ? `Tus Pre-Ordenes (${preorderedItemsList.length})` : `Your Pre-orders (${preorderedItemsList.length})`}
+                  </h5>
+                  <div className="max-h-[120px] overflow-y-auto space-y-1.5 text-xs pr-1 scrollbar-none">
+                    {preorderedItemsList.map((item) => {
+                      const nameResolved = item.product?.name[language] || item.product?.name.es;
+                      return (
+                        <div key={item.product?.id} className="flex justify-between items-center text-[11px]">
+                          <span className="text-editorial-charcoal truncate max-w-[120px]">
+                            {item.quantity}x {nameResolved}
+                          </span>
+                          <span className="text-editorial-charcoal/70 font-mono font-semibold">${item.subtotal.toFixed(2)}</span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
+              )}
 
-                {/* Info and Customer credentials form */}
-                <form onSubmit={handleProceedToPayment} className="bg-editorial-bg border border-editorial-charcoal/15 p-5 rounded-none space-y-4">
-                  <h4 className="text-[10px] font-bold text-editorial-charcoal/70 uppercase tracking-widest flex items-center gap-1.5 border-b border-editorial-charcoal/10 pb-2">
-                    <Users className="w-4 h-4 text-editorial-charcoal" />
-                    <span>Datos de Contacto para Reservación</span>
-                  </h4>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] text-editorial-charcoal/60 mb-1 font-bold uppercase tracking-wider">Tu Nombre Completo</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej. Tupac Amaru Chango"
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        className="w-full bg-editorial-stone/20 border border-editorial-charcoal/20 rounded-none text-xs py-2.5 px-3 text-editorial-charcoal focus:outline-none focus:border-editorial-charcoal font-sans"
-                        id="booking-cust-name"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-editorial-charcoal/60 mb-1 font-bold uppercase tracking-wider">WhatsApp (Ej. +593)</label>
-                      <input
-                        type="tel"
-                        required
-                        placeholder="+593 98 765 4321"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                        className="w-full bg-editorial-stone/20 border border-editorial-charcoal/20 rounded-none text-xs py-2.5 px-3 text-editorial-charcoal focus:outline-none focus:border-editorial-charcoal font-sans font-mono"
-                        id="booking-cust-phone"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] text-editorial-charcoal/60 mb-1 font-bold uppercase tracking-wider">Correo Electrónico</label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="maria@example.com"
-                      value={customerEmail}
-                      onChange={(e) => setCustomerEmail(e.target.value)}
-                      className="w-full bg-editorial-stone/20 border border-editorial-charcoal/20 rounded-none text-xs py-2.5 px-3 text-editorial-charcoal focus:outline-none focus:border-editorial-charcoal font-sans"
-                      id="booking-cust-email"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] text-editorial-charcoal/60 mb-1 font-bold uppercase tracking-wider">Peticiones o Alergias Especiales (Opcional)</label>
-                    <textarea
-                      placeholder="Ej. Cumpleaños, mesa libre de maní, rilla de ruedas, etc."
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      rows={2}
-                      className="w-full bg-editorial-stone/20 border border-editorial-charcoal/20 rounded-none text-xs py-2 px-3 text-editorial-charcoal focus:outline-none focus:border-editorial-charcoal resize-none font-sans"
-                      id="booking-cust-notes"
-                    />
-                  </div>
-
-                  <button type="submit" className="hidden" id="booking-form-submit-hidden" />
-                </form>
-              </div>
-
-              {/* Right Column: Checkout Summary Sidebar */}
-              <div className="space-y-4">
-                <div className="bg-editorial-stone/30 border border-editorial-charcoal/15 p-4 rounded-none space-y-4">
-                  <h4 className="text-[10px] font-bold text-editorial-charcoal uppercase tracking-widest flex items-center gap-1.5 border-b border-editorial-charcoal/15 pb-2">
-                    <Receipt className="w-4 h-4" />
-                    <span>Resumen de la Cita</span>
-                  </h4>
-
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-editorial-charcoal/60">Establecimiento:</span>
-                      <span className="text-editorial-charcoal font-bold">{businessConfig.name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-editorial-charcoal/60">Fecha/Hora:</span>
-                      <span className="text-editorial-charcoal font-bold font-mono">{date} • {timeSlot} hs</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-editorial-charcoal/60">Invitados:</span>
-                      <span className="text-editorial-charcoal font-bold">{guestsCount} personas</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-editorial-charcoal/60">Espacio:</span>
-                      <span className="text-editorial-charcoal font-bold font-serif italic truncate max-w-[150px] block text-right">
-                        {AREA_LABELS[selectedArea].label}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-editorial-charcoal/60">Mesa:</span>
-                      <span className="text-editorial-charcoal font-bold truncate max-w-[150px] block text-right">
-                        {selectedTable?.name || selectedTableId}
-                      </span>
-                    </div>
-                  </div>
-
-                  {preorderedItemsList.length > 0 && (
-                    <div className="border-t border-editorial-charcoal/10 pt-3 space-y-2">
-                      <h5 className="text-[9px] font-bold text-editorial-charcoal/60 uppercase tracking-widest">Tus Pre-Ordenes ({preorderedItemsList.length})</h5>
-                      <div className="max-h-[120px] overflow-y-auto space-y-1.5 text-xs pr-1 scrollbar-none">
-                        {preorderedItemsList.map((item) => (
-                          <div key={item.product?.id} className="flex justify-between items-center text-[11px]">
-                            <span className="text-editorial-charcoal truncate max-w-[120px]">
-                              {item.quantity}x {item.product?.name}
-                            </span>
-                            <span className="text-editorial-charcoal/70 font-mono font-semibold">${item.subtotal.toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Financial computations */}
-                  <div className="border-t border-editorial-charcoal/10 pt-3 space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-editorial-charcoal/60">Consumo Mínimo de Mesa:</span>
-                      <span className="text-editorial-charcoal font-bold font-mono">${tableMinConsumption.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-editorial-charcoal/60">Pre-ordenes Realizadas:</span>
-                      <span className="text-editorial-charcoal font-bold font-mono">${preordersTotal.toFixed(2)}</span>
-                    </div>
-
-                    {/* Pre-order compensates minimum table consumption logic! */}
-                    {preordersTotal > 0 && preordersTotal < tableMinConsumption && (
-                      <div className="p-2.5 bg-editorial-bg border border-editorial-charcoal/10 text-[10px] text-editorial-charcoal/80 font-sans leading-normal">
-                        Nota: Tu pre-orden de <span className="font-bold text-editorial-charcoal font-mono">${preordersTotal.toFixed(2)}</span> cubre parte del consumo mínimo de la mesa.
-                      </div>
-                    )}
-
-                    <div className="flex justify-between items-baseline pt-2 border-t border-editorial-charcoal/15 text-editorial-charcoal">
-                      <span className="font-bold text-editorial-charcoal/60 uppercase text-[10px] tracking-wider">Total a Cancelar:</span>
-                      <span className="text-xl font-bold font-serif italic text-editorial-charcoal">${totalToPay.toFixed(2)} USD</span>
-                    </div>
-                  </div>
+              {/* Financial computations */}
+              <div className="border-t border-editorial-charcoal/10 pt-3 space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-editorial-charcoal/60">{language === 'es' ? 'Consumo Mínimo de Mesa:' : 'Minimum Table Consumption:'}</span>
+                  <span className="text-editorial-charcoal font-bold font-mono">${tableMinConsumption.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-editorial-charcoal/60">{language === 'es' ? 'Pre-ordenes Realizadas:' : 'Pre-orders Placed:'}</span>
+                  <span className="text-editorial-charcoal font-bold font-mono">${preordersTotal.toFixed(2)}</span>
                 </div>
 
-                {/* Submit button wrapper trigger */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const form = document.getElementById('booking-form-submit-hidden') as HTMLButtonElement | null;
-                    if (form) form.click();
-                  }}
-                  className="w-full bg-editorial-charcoal text-editorial-bg font-bold py-3.5 rounded-none flex items-center justify-center gap-2 hover:bg-editorial-charcoal/90 transition-all cursor-pointer shadow-none uppercase tracking-widest text-xs border border-editorial-charcoal"
-                  id="pay-and-confirm-trigger"
-                >
-                  <Sparkles className="w-4 h-4 text-editorial-stone" />
-                  <span>Proceder con Reserva</span>
-                </button>
+                {/* Pre-order compensates minimum table consumption logic! */}
+                {preordersTotal > 0 && preordersTotal < tableMinConsumption && (
+                  <div className="p-2.5 bg-editorial-bg border border-editorial-charcoal/10 text-[10px] text-editorial-charcoal/80 font-sans leading-normal">
+                    {language === 'es'
+                      ? `Nota: Tu pre-orden de $${preordersTotal.toFixed(2)} cubre parte del consumo mínimo de la mesa.`
+                      : `Note: Your pre-order of $${preordersTotal.toFixed(2)} covers part of the table's minimum consumption.`}
+                  </div>
+                )}
+
+                <div className="flex justify-between items-baseline pt-2 border-t border-editorial-charcoal/15 text-editorial-charcoal">
+                  <span className="font-bold text-editorial-charcoal/60 uppercase text-[10px] tracking-wider">
+                    {language === 'es' ? 'Total a Cancelar:' : 'Total to Pay:'}
+                  </span>
+                  <span className="text-xl font-bold font-serif italic text-editorial-charcoal">${totalToPay.toFixed(2)} USD</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Submit button wrapper trigger */}
+            <button
+              type="button"
+              onClick={() => {
+                const form = document.getElementById('booking-form-submit-hidden') as HTMLButtonElement | null;
+                if (form) form.click();
+              }}
+              className="w-full bg-editorial-charcoal text-editorial-bg font-bold py-3.5 rounded-none flex items-center justify-center gap-2 hover:bg-editorial-charcoal/90 transition-all cursor-pointer shadow-none uppercase tracking-widest text-xs border border-editorial-charcoal"
+              id="pay-and-confirm-trigger"
+            >
+              <Sparkles className="w-4 h-4 text-editorial-stone" />
+              <span>{language === 'es' ? 'Proceder con Reserva' : 'Proceed with Booking'}</span>
+            </button>
               </div>
             </div>
 
@@ -895,7 +785,11 @@ export default function BookingSection({
               onClose={() => setIsPaymentOpen(false)}
               onSuccess={handlePaymentSuccess}
               amount={totalToPay}
-              description={`Reserva de Mesa en ${AREA_LABELS[selectedArea].label} (${selectedTable?.name || selectedTableId}) - ${date}`}
+              description={
+                language === 'es'
+                  ? `Reserva de Mesa en ${getAreaLabel(selectedArea)} (${selectedTable ? (selectedTable.name[language] || selectedTable.name.es) : selectedTableId}) - ${date}`
+                  : `Table Reservation in ${getAreaLabel(selectedArea)} (${selectedTable ? (selectedTable.name[language] || selectedTable.name.en) : selectedTableId}) - ${date}`
+              }
             />
           </motion.div>
         )}
@@ -914,10 +808,16 @@ export default function BookingSection({
             </div>
 
             <div className="space-y-1">
-              <span className="text-emerald-800 font-bold text-[10px] uppercase tracking-[0.2em] block">¡Reserva Completada!</span>
-              <h3 className="text-3xl font-serif font-bold italic text-editorial-charcoal">Tu Mesa en la Cascada te Espera</h3>
+              <span className="text-emerald-800 font-bold text-[10px] uppercase tracking-[0.2em] block">
+                {language === 'es' ? '¡Reserva Completada!' : 'Reservation Completed!'}
+              </span>
+              <h3 className="text-3xl font-serif font-bold italic text-editorial-charcoal">
+                {language === 'es' ? 'Tu Mesa en la Cascada te Espera' : 'Your Table by the Waterfall Awaits'}
+              </h3>
               <p className="text-editorial-charcoal/80 text-sm max-w-md mx-auto">
-                Hemos recibido tu solicitud y se ha realizado tu acreditación online. Presiona el botón de abajo para enviar los detalles a nuestro WhatsApp de Chayka Coffee.
+                {language === 'es'
+                  ? 'Hemos recibido tu solicitud y se ha realizado tu acreditación online. Presiona el botón de abajo para enviar los detalles a nuestro WhatsApp de Chayka Coffee.'
+                  : 'We have received your request and your online validation has been completed. Press the button below to send the details to our Chayka Coffee WhatsApp.'}
               </p>
             </div>
 
@@ -926,7 +826,9 @@ export default function BookingSection({
               <div className="flex justify-between items-center border-b border-dashed border-editorial-charcoal/20 pb-3">
                 <div>
                   <h4 className="text-xs font-bold text-editorial-charcoal uppercase tracking-widest">CHAYKA COFFEE</h4>
-                  <span className="text-[10px] text-editorial-charcoal/60">Otavalo, Cascada de Peguche</span>
+                  <span className="text-[10px] text-editorial-charcoal/60">
+                    {language === 'es' ? 'Otavalo, Cascada de Peguche' : 'Otavalo, Peguche Waterfall'}
+                  </span>
                 </div>
                 <div className="text-right">
                   <span className="text-[9px] text-editorial-charcoal/50 block uppercase font-mono tracking-wider">Ticket</span>
@@ -936,7 +838,9 @@ export default function BookingSection({
 
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
-                  <span className="text-editorial-charcoal/50 block uppercase text-[8px] font-bold tracking-wider">Cliente</span>
+                  <span className="text-editorial-charcoal/50 block uppercase text-[8px] font-bold tracking-wider">
+                    {language === 'es' ? 'Cliente' : 'Customer'}
+                  </span>
                   <span className="text-editorial-charcoal font-bold">{completedBooking.customerName}</span>
                 </div>
                 <div>
@@ -944,46 +848,81 @@ export default function BookingSection({
                   <span className="text-editorial-charcoal font-mono font-semibold">{completedBooking.customerPhone}</span>
                 </div>
                 <div>
-                  <span className="text-editorial-charcoal/50 block uppercase text-[8px] font-bold tracking-wider">Fecha de Cita</span>
+                  <span className="text-editorial-charcoal/50 block uppercase text-[8px] font-bold tracking-wider">
+                    {language === 'es' ? 'Fecha de Cita' : 'Appointment Date'}
+                  </span>
                   <span className="text-editorial-charcoal font-bold font-mono">{completedBooking.date}</span>
                 </div>
                 <div>
-                  <span className="text-editorial-charcoal/50 block uppercase text-[8px] font-bold tracking-wider">Horario / Bloque</span>
-                  <span className="text-editorial-charcoal font-bold font-mono">{completedBooking.timeSlot} hs</span>
+                  <span className="text-editorial-charcoal/50 block uppercase text-[8px] font-bold tracking-wider">
+                    {language === 'es' ? 'Horario / Bloque' : 'Schedule / Slot'}
+                  </span>
+                  <span className="text-editorial-charcoal font-bold font-mono">{completedBooking.timeSlot} {language === 'es' ? 'hs' : 'hrs'}</span>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-editorial-charcoal/50 block uppercase text-[8px] font-bold tracking-wider">Ubicación y Mesa</span>
+                  <span className="text-editorial-charcoal/50 block uppercase text-[8px] font-bold tracking-wider">
+                    {language === 'es' ? 'Ubicación y Mesa' : 'Location and Table'}
+                  </span>
                   <span className="text-editorial-charcoal font-bold italic font-serif">
-                    {AREA_LABELS[completedBooking.area].label} - {selectedTable?.name || completedBooking.tableId}
+                    {getAreaLabel(completedBooking.area)} - {selectedTable ? (selectedTable.name[language] || selectedTable.name.es) : completedBooking.tableId}
                   </span>
                 </div>
               </div>
 
               {preorderedItemsList.length > 0 && (
                 <div className="border-t border-dashed border-editorial-charcoal/20 pt-3 space-y-1.5 text-xs">
-                  <span className="text-editorial-charcoal/50 block uppercase text-[8px] font-bold tracking-wider">Pre-órdenes Incluidas</span>
-                  {preorderedItemsList.map((item) => (
-                    <div key={item.product?.id} className="flex justify-between text-editorial-charcoal/80 font-mono text-[11px]">
-                      <span>{item.quantity}x {item.product?.name}</span>
-                      <span>${item.subtotal.toFixed(2)}</span>
-                    </div>
-                  ))}
+                  <span className="text-editorial-charcoal/50 block uppercase text-[8px] font-bold tracking-wider">
+                    {language === 'es' ? 'Pre-órdenes Incluidas' : 'Pre-orders Included'}
+                  </span>
+                  {preorderedItemsList.map((item) => {
+                    const nameResolved = item.product?.name[language] || item.product?.name.es;
+                    return (
+                      <div key={item.product?.id} className="flex justify-between text-editorial-charcoal/80 font-mono text-[11px]">
+                        <span>{item.quantity}x {nameResolved}</span>
+                        <span>${item.subtotal.toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
               <div className="border-t border-dashed border-editorial-charcoal/20 pt-3 flex justify-between items-baseline text-editorial-charcoal">
-                <span className="text-[9px] uppercase font-bold tracking-wider text-editorial-charcoal/50 font-mono">Total Garantizado:</span>
+                <span className="text-[9px] uppercase font-bold tracking-wider text-editorial-charcoal/50 font-mono">
+                  {language === 'es' ? 'Total Garantizado:' : 'Guaranteed Total:'}
+                </span>
                 <span className="text-lg font-black font-serif italic">${totalToPay.toFixed(2)} USD</span>
               </div>
 
               <div className="bg-editorial-stone/40 border border-editorial-charcoal/10 p-2.5 rounded-none text-[10px] text-center text-editorial-charcoal font-bold font-mono uppercase tracking-wider">
-                Estado: {completedBooking.paymentStatus === 'simulated_paid' ? (
-                  <span className="text-emerald-800 font-bold uppercase flex items-center gap-1 justify-center">
-                    <CheckCircle className="w-3.5 h-3.5" /> Pago Simulado ({completedBooking.paymentReference})
-                  </span>
-                ) : (
-                  <span className="text-editorial-charcoal font-bold uppercase">Por pagar en local en efectivo/tarjeta</span>
-                )}
+                {language === 'es' ? 'Método de Pago' : 'Payment Method'}: {(() => {
+                  const ref = completedBooking.paymentReference || '';
+                  if (ref.startsWith('TRF-')) {
+                    return (
+                      <span className="text-emerald-800 font-bold uppercase flex items-center gap-1 justify-center mt-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> {language === 'es' ? 'Transferencia Bancaria' : 'Bank Transfer'} ({ref.replace('TRF-', '')})
+                      </span>
+                    );
+                  }
+                  if (ref === 'EFECTIVO-LOCAL') {
+                    return (
+                      <span className="text-amber-850 font-bold uppercase flex items-center gap-1 justify-center mt-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> {language === 'es' ? 'Efectivo en local' : 'Cash at store'}
+                      </span>
+                    );
+                  }
+                  if (ref.startsWith('PAY-')) {
+                    return (
+                      <span className="text-emerald-800 font-bold uppercase flex items-center gap-1 justify-center mt-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> {language === 'es' ? 'Tarjeta (Crédito/Débito)' : 'Card (Credit/Debit)'} ({ref})
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="text-editorial-charcoal font-bold uppercase mt-1 block">
+                      {language === 'es' ? 'Pendiente / Pago en local' : 'Pending / Pay at shop'}
+                    </span>
+                  );
+                })()}
               </div>
             </div>
 
@@ -997,7 +936,7 @@ export default function BookingSection({
                 id="whatsapp-confirm-anchor"
               >
                 <Send className="w-4 h-4 fill-editorial-bg text-editorial-bg" />
-                <span>Enviar a Whatsapp</span>
+                <span>{language === 'es' ? 'Enviar a Whatsapp' : 'Send to WhatsApp'}</span>
               </a>
 
               <button
@@ -1007,12 +946,14 @@ export default function BookingSection({
                 id="copy-invoice-btn"
               >
                 <Receipt className="w-4 h-4" />
-                <span>Copiar Recibo</span>
+                <span>{language === 'es' ? 'Copiar Recibo' : 'Copy Receipt'}</span>
               </button>
             </div>
 
             <p className="text-[10px] text-editorial-charcoal/60 text-center max-w-sm mx-auto font-sans leading-normal">
-              Chayka Coffee se ubica en el sendero principal del Parque Cascada de Peguche. ¡Prepara tu cámara para un entorno único!
+              {language === 'es'
+                ? 'Chayka Coffee se ubica en el sendero principal del Parque Cascada de Peguche. ¡Prepara tu cámara para un entorno único!'
+                : 'Chayka Coffee is located on the main trail of Peguche Waterfall Park. Prepare your camera for a unique setting!'}
             </p>
 
             <div className="pt-4">
@@ -1030,7 +971,7 @@ export default function BookingSection({
                 className="text-editorial-charcoal/70 hover:text-editorial-charcoal text-xs font-bold uppercase tracking-widest cursor-pointer hover:underline"
                 id="make-another-booking-btn"
               >
-                Hacer Otra Reservación
+                {language === 'es' ? 'Hacer Otra Reservación' : 'Make Another Reservation'}
               </button>
             </div>
           </motion.div>

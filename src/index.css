@@ -6,8 +6,19 @@
   --font-sans: "Plus Jakarta Sans", "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
   
+  --color-coffee-bg: #E6D5C3;
+  --color-espresso: #1C1613;
+  --color-ochre: #8A4B27;
+  --color-accent-red: #FF4500;
+  
   --color-editorial-bg: #F9F7F2;
   --color-editorial-charcoal: #2C2C2C;
   --color-editorial-stone: #E6E2D8;
   --color-editorial-stone-dark: #D4CEC1;
+}
+
+body {
+  background-color: var(--color-coffee-bg);
+  color: var(--color-espresso);
+  font-family: var(--font-sans);
 }
