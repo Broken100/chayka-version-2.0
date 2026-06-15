@@ -3,20 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, type FormEvent, type Dispatch, type SetStateAction } from 'react';
+import { useState, type FormEvent } from 'react';
 import { ReservationTable, TableArea } from '../../types';
 import { useReservation } from '../../context/ReservationContext';
+import { useTablesQuery } from '../../lib/queries';
+import { useCreateTable, useDeleteTable } from '../../lib/mutations';
 import { t } from '../../utils/translations';
 import { Plus, Save, Trash2 } from 'lucide-react';
 
-interface TablesManagerProps {
-  tables: ReservationTable[];
-  setTables: Dispatch<SetStateAction<ReservationTable[]>>;
-}
-
-export default function TablesManager({ tables, setTables }: TablesManagerProps) {
+export default function TablesManager() {
   const { language } = useReservation();
   const isEs = language === 'es';
+  const tablesQuery = useTablesQuery();
+  const createTableMutation = useCreateTable();
+  const deleteTableMutation = useDeleteTable();
+  const tables: ReservationTable[] = (tablesQuery.data ?? []) as unknown as ReservationTable[];
 
   const [isAddingTable, setIsAddingTable] = useState<boolean>(false);
   const [tableForm, setTableForm] = useState<Partial<ReservationTable>>({
@@ -27,27 +28,29 @@ export default function TablesManager({ tables, setTables }: TablesManagerProps)
     minimumConsumption: 10.00
   });
 
-  const handleAddTable = (e: FormEvent) => {
+  const handleAddTable = async (e: FormEvent) => {
     e.preventDefault();
     if (!tableForm.id || !tableForm.name?.es || !tableForm.name?.en) return;
 
-    const newTable: ReservationTable = {
-      id: tableForm.id,
-      name: { es: tableForm.name.es, en: tableForm.name.en },
-      capacity: Number(tableForm.capacity) || 4,
-      area: (tableForm.area as TableArea) || 'waterfall_deck',
-      minimumConsumption: Number(tableForm.minimumConsumption) || 0
-    };
-
-    setTables((prev) => [...prev, newTable]);
-    setIsAddingTable(false);
-    setTableForm({
-      id: '',
-      name: { es: '', en: '' },
-      capacity: 4,
-      area: 'waterfall_deck',
-      minimumConsumption: 10.00
-    });
+    try {
+      await createTableMutation.mutateAsync({
+        id: tableForm.id,
+        name: { es: tableForm.name.es, en: tableForm.name.en },
+        capacity: Number(tableForm.capacity) || 4,
+        area: (tableForm.area as string) || 'waterfall_deck',
+        minimumConsumption: Number(tableForm.minimumConsumption) || 0
+      });
+      setIsAddingTable(false);
+      setTableForm({
+        id: '',
+        name: { es: '', en: '' },
+        capacity: 4,
+        area: 'waterfall_deck',
+        minimumConsumption: 10.00
+      });
+    } catch {
+      // Error handled by mutation; table won't appear because query refetches
+    }
   };
 
   const handleDeleteTable = (tableId: string) => {
@@ -55,7 +58,7 @@ export default function TablesManager({ tables, setTables }: TablesManagerProps)
       ? '¿Seguro quieres eliminar esta mesa?'
       : 'Are you sure you want to delete this table?';
     if (window.confirm(confirmMsg)) {
-      setTables((prev) => prev.filter((t) => t.id !== tableId));
+      deleteTableMutation.mutate(tableId);
     }
   };
 

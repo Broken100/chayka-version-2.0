@@ -1,215 +1,147 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { type Dispatch, type SetStateAction } from 'react';
+import { useState } from 'react';
 import { BusinessConfig } from '../../types';
 import { useReservation } from '../../context/ReservationContext';
-import { Smartphone, Clock, Grid } from 'lucide-react';
+import { useBusinessConfigQuery } from '../../lib/queries';
+import { useUpdateBusinessConfig } from '../../lib/mutations';
+import { Smartphone, Clock, MapPin, Users, Save } from 'lucide-react';
 
-interface SettingsPanelProps {
-  businessConfig: BusinessConfig;
-  setBusinessConfig: Dispatch<SetStateAction<BusinessConfig>>;
-}
-
-export default function SettingsPanel({ businessConfig, setBusinessConfig }: SettingsPanelProps) {
-  const { language } = useReservation();
+export default function SettingsPanel() {
+  const { language, addNotification } = useReservation();
   const isEs = language === 'es';
-
-  const handleUpdateSchedule = (index: number, key: 'day' | 'hours', value: string) => {
-    const updatedSchedules = [...businessConfig.schedules];
-    updatedSchedules[index] = { ...updatedSchedules[index], [key]: value };
-    setBusinessConfig((prev) => ({ ...prev, schedules: updatedSchedules }));
+  const configQuery = useBusinessConfigQuery();
+  const updateConfigMutation = useUpdateBusinessConfig();
+  const bc: BusinessConfig = configQuery.data ?? {
+    name: '', location: '', locationLink: '', whatsappNumber: '',
+    minPeopleReservation: 1, maxPeopleReservation: 10,
+    schedules: [], timeSlots: []
   };
 
-  const handleAddTimeSlot = (newSlot: string) => {
-    if (!newSlot || businessConfig.timeSlots.includes(newSlot)) return;
-    const updatedSlots = [...businessConfig.timeSlots, newSlot].sort();
-    setBusinessConfig((prev) => ({ ...prev, timeSlots: updatedSlots }));
+  const [draft, setDraft] = useState<Partial<BusinessConfig>>({});
+
+  const save = (section: string) => {
+    const payload = section === 'hours'
+      ? { schedules: (draft.schedules ?? bc.schedules), timeSlots: (draft.timeSlots ?? bc.timeSlots) }
+      : draft;
+    updateConfigMutation.mutate(payload as Partial<BusinessConfig>, {
+      onSuccess: () => {
+        addNotification(isEs ? 'Configuración' : 'Settings', isEs ? 'Sección guardada' : 'Section saved', 'success');
+        setDraft({});
+      }
+    });
   };
 
-  const handleRemoveTimeSlot = (slot: string) => {
-    setBusinessConfig((prev) => ({
-      ...prev,
-      timeSlots: prev.timeSlots.filter((s) => s !== slot)
-    }));
-  };
+  const m = { ...bc, ...draft };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" id="admin-settings-view">
-      {/* General Business Information Settings */}
+      {/* CONTACT */}
       <div className="bg-white border border-espresso/15 p-5 rounded-2xl space-y-4 text-left shadow-sm">
         <h3 className="text-sm font-bold text-ochre uppercase tracking-widest border-b border-espresso/10 pb-2 flex items-center gap-1.5">
-          <Smartphone className="w-4 h-4 text-ochre" />
-          <span>{isEs ? 'General e Integración WhatsApp' : 'General & WhatsApp Integration'}</span>
+          <Smartphone className="w-4 h-4" /><span>{isEs ? 'Contacto' : 'Contact'}</span>
         </h3>
-
-        <div className="space-y-3">
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">
-              {isEs ? 'Número de Atención WhatsApp (Link Destino directo)' : 'WhatsApp Business Number (Direct link format)'}
-            </label>
-            <input
-              type="text"
-              required
-              value={businessConfig.whatsappNumber}
-              onChange={(e) => setBusinessConfig({ ...businessConfig, whatsappNumber: e.target.value })}
-              className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2.5 px-3 text-espresso focus:outline-none focus:border-ochre"
-              id="admin-conf-wa"
-            />
-            <p className="text-[10px] text-espresso/50 mt-1 leading-normal italic">
-              {isEs
-                ? 'Inserta el número en formato internacional con código de país (Ej. +593987654321 para Ecuador).'
-                : 'Insert the number in international format with country code (e.g., +593987654321 for Ecuador).'}
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">
-              {isEs ? 'Lugar Geográfico' : 'Geographic Location'}
-            </label>
-            <input
-              type="text"
-              required
-              value={businessConfig.location}
-              onChange={(e) => setBusinessConfig({ ...businessConfig, location: e.target.value })}
-              className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2.5 px-3 text-espresso focus:outline-none focus:border-ochre"
-              id="admin-conf-loc"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">
-              {isEs ? 'Enlace a Google Maps pin' : 'Google Maps Pin Link'}
-            </label>
-            <input
-              type="text"
-              required
-              value={businessConfig.locationLink}
-              onChange={(e) => setBusinessConfig({ ...businessConfig, locationLink: e.target.value })}
-              className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2.5 px-3 text-espresso focus:outline-none focus:border-ochre"
-              id="admin-conf-loclink"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">
-                {isEs ? 'Min Pax por Cita' : 'Min Guests per Booking'}
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={businessConfig.minPeopleReservation}
-                onChange={(e) => setBusinessConfig({ ...businessConfig, minPeopleReservation: parseInt(e.target.value) })}
-                className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3 text-espresso focus:outline-none focus:border-ochre"
-                id="admin-conf-min"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">
-                {isEs ? 'Max Pax por Cita' : 'Max Guests per Booking'}
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={businessConfig.maxPeopleReservation}
-                onChange={(e) => setBusinessConfig({ ...businessConfig, maxPeopleReservation: parseInt(e.target.value) })}
-                className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3 text-espresso focus:outline-none focus:border-ochre"
-                id="admin-conf-max"
-              />
-            </div>
-          </div>
-        </div>
+        <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">WhatsApp</label>
+        <input type="text" value={m.whatsappNumber}
+          onChange={(e) => setDraft((d) => ({ ...d, whatsappNumber: e.target.value }))}
+          className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2.5 px-3" id="admin-conf-wa" />
+        <button onClick={() => save('contact')}
+          disabled={!draft.whatsappNumber || updateConfigMutation.isPending}
+          className="bg-ochre hover:bg-ochre/90 disabled:bg-ochre/60 text-coffee-bg text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all"
+          data-testid="admin-conf-save-contact">
+          <Save className="w-3.5 h-3.5" />{isEs ? 'Guardar Contacto' : 'Save Contact'}
+        </button>
       </div>
 
-      {/* Time Slots & Business hours Settings */}
-      <div className="space-y-6">
-        <div className="bg-white border border-espresso/15 p-5 rounded-2xl space-y-4 text-left shadow-sm">
-          <h3 className="text-sm font-bold text-ochre uppercase tracking-widest border-b border-espresso/10 pb-2 flex items-center gap-1.5">
-            <Clock className="w-4 h-4 text-ochre" />
-            <span>{isEs ? 'Horarios Semanales Abiertos' : 'Weekly Business Hours'}</span>
-          </h3>
-
-          <div className="space-y-3">
-            {businessConfig.schedules.map((sched, idx) => (
-              <div key={idx} className="flex gap-2.5 items-center" id={`admin-sched-row-${idx}`}>
-                <input
-                  type="text"
-                  value={sched.day}
-                  onChange={(e) => handleUpdateSchedule(idx, 'day', e.target.value)}
-                  className="bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3 text-espresso focus:outline-none focus:border-ochre w-1/3"
-                />
-                <input
-                  type="text"
-                  value={sched.hours}
-                  onChange={(e) => handleUpdateSchedule(idx, 'hours', e.target.value)}
-                  className="bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3 text-espresso focus:outline-none focus:border-ochre flex-grow"
-                />
-              </div>
-            ))}
+      {/* BRANDING */}
+      <div className="bg-white border border-espresso/15 p-5 rounded-2xl space-y-4 text-left shadow-sm">
+        <h3 className="text-sm font-bold text-ochre uppercase tracking-widest border-b border-espresso/10 pb-2 flex items-center gap-1.5">
+          <MapPin className="w-4 h-4" /><span>{isEs ? 'Marca y ubicación' : 'Branding & Location'}</span>
+        </h3>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">Nombre</label>
+            <input type="text" value={m.name}
+              onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+              className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2.5 px-3" />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">{isEs ? 'Ubicación' : 'Location'}</label>
+            <input type="text" value={m.location}
+              onChange={(e) => setDraft((d) => ({ ...d, location: e.target.value }))}
+              className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2.5 px-3" />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">Google Maps Link</label>
+            <input type="text" value={m.locationLink}
+              onChange={(e) => setDraft((d) => ({ ...d, locationLink: e.target.value }))}
+              className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2.5 px-3" />
           </div>
         </div>
+        <button onClick={() => save('branding')}
+          disabled={(!draft.name && !draft.location && !draft.locationLink) || updateConfigMutation.isPending}
+          className="bg-ochre hover:bg-ochre/90 disabled:bg-ochre/60 text-coffee-bg text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all"
+          data-testid="admin-conf-save-branding">
+          <Save className="w-3.5 h-3.5" />{isEs ? 'Guardar Marca' : 'Save Branding'}
+        </button>
+      </div>
 
-        <div className="bg-white border border-espresso/15 p-5 rounded-2xl space-y-4 text-left shadow-sm">
-          <h3 className="text-sm font-bold text-ochre uppercase tracking-widest border-b border-espresso/10 pb-2 flex items-center gap-1.5">
-            <Grid className="w-4 h-4 text-ochre" />
-            <span>{isEs ? 'Bloques Horarios Disponibles' : 'Available Booking Slots'}</span>
-          </h3>
+      {/* HOURS */}
+      <div className="bg-white border border-espresso/15 p-5 rounded-2xl space-y-4 text-left shadow-sm">
+        <h3 className="text-sm font-bold text-ochre uppercase tracking-widest border-b border-espresso/10 pb-2 flex items-center gap-1.5">
+          <Clock className="w-4 h-4" /><span>{isEs ? 'Horarios' : 'Hours'}</span>
+        </h3>
+        <div className="space-y-3">
+          {(m.schedules ?? []).map((sched, idx) => (
+            <div key={idx} className="flex gap-2.5">
+              <input type="text" value={sched.day}
+                onChange={(e) => {
+                  const s = [...(draft.schedules ?? bc.schedules)];
+                  s[idx] = { ...s[idx], day: e.target.value };
+                  setDraft((d) => ({ ...d, schedules: s }));
+                }}
+                className="bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3 w-1/3" />
+              <input type="text" value={sched.hours}
+                onChange={(e) => {
+                  const s = [...(draft.schedules ?? bc.schedules)];
+                  s[idx] = { ...s[idx], hours: e.target.value };
+                  setDraft((d) => ({ ...d, schedules: s }));
+                }}
+                className="bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3 flex-grow" />
+            </div>
+          ))}
+        </div>
+        <button onClick={() => save('hours')}
+          disabled={updateConfigMutation.isPending}
+          className="bg-ochre hover:bg-ochre/90 disabled:bg-ochre/60 text-coffee-bg text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all"
+          data-testid="admin-conf-save-hours">
+          <Save className="w-3.5 h-3.5" />{isEs ? 'Guardar Horarios' : 'Save Hours'}
+        </button>
+      </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {businessConfig.timeSlots.map((slot) => (
-              <span
-                key={slot}
-                className="bg-espresso/5 text-espresso text-xs px-2.5 py-1 rounded-xl border border-espresso/10 flex items-center gap-1.5 font-mono"
-                id={`admin-slot-tag-${slot.replace(':', '-')}`}
-              >
-                <span>{slot} HS</span>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveTimeSlot(slot)}
-                  className="text-espresso/40 hover:text-rose-600 font-extrabold cursor-pointer"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
+      {/* RESERVATIONS */}
+      <div className="bg-white border border-espresso/15 p-5 rounded-2xl space-y-4 text-left shadow-sm">
+        <h3 className="text-sm font-bold text-ochre uppercase tracking-widest border-b border-espresso/10 pb-2 flex items-center gap-1.5">
+          <Users className="w-4 h-4" /><span>{isEs ? 'Capacidad de reservas' : 'Booking Capacity'}</span>
+        </h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">Min Pax</label>
+            <input type="number" min={1} value={m.minPeopleReservation}
+              onChange={(e) => setDraft((d) => ({ ...d, minPeopleReservation: parseInt(e.target.value) }))}
+              className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3" />
           </div>
-
-          <div className="flex gap-2.5 pt-2 border-t border-espresso/10 text-left">
-            <input
-              type="text"
-              placeholder={isEs ? 'Ej. 13:30 (formato 24h)' : 'e.g. 13:30 (24h format)'}
-              maxLength={5}
-              id="admin-new-timeslot-input"
-              className="bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3 text-espresso focus:outline-none focus:border-ochre flex-grow font-mono"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  const val = (e.target as HTMLInputElement).value.trim();
-                  if (val) {
-                    handleAddTimeSlot(val);
-                    (e.target as HTMLInputElement).value = '';
-                  }
-                }
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                const el = document.getElementById('admin-new-timeslot-input') as HTMLInputElement | null;
-                if (el && el.value.trim()) {
-                  handleAddTimeSlot(el.value.trim());
-                  el.value = '';
-                }
-              }}
-              className="bg-espresso text-coffee-bg hover:bg-espresso/90 border border-transparent text-xs font-bold px-4 py-2 rounded-lg cursor-pointer transition-colors"
-            >
-              {isEs ? 'Agregar Bloque' : 'Add Slot'}
-            </button>
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">Max Pax</label>
+            <input type="number" min={1} value={m.maxPeopleReservation}
+              onChange={(e) => setDraft((d) => ({ ...d, maxPeopleReservation: parseInt(e.target.value) }))}
+              className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3" />
           </div>
         </div>
+        <button onClick={() => save('reservations')}
+          disabled={(!draft.minPeopleReservation && !draft.maxPeopleReservation) || updateConfigMutation.isPending}
+          className="bg-ochre hover:bg-ochre/90 disabled:bg-ochre/60 text-coffee-bg text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all"
+          data-testid="admin-conf-save-reservations">
+          <Save className="w-3.5 h-3.5" />{isEs ? 'Guardar Capacidad' : 'Save Capacity'}
+        </button>
       </div>
     </div>
   );
