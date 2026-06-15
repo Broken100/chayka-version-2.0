@@ -59,6 +59,7 @@ export const mockApi = {
     if (path === '/tables') return tableRows;
     if (path === '/business-config') return configRow;
     if (path === '/admin/me') return { authenticated: true, expiresAt: new Date(Date.now() + 86400000).toISOString() };
+    if (path === '/reservations') return [];
     throw new Error(`Unhandled mock path: ${path}`);
   }),
   post: vi.fn(async (path: string, body?: unknown) => {
