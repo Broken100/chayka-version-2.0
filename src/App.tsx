@@ -35,10 +35,7 @@ function AppContent() {
     updateMenuProduct,
     notifications,
     addNotification,
-    dismissNotification,
-    setMenuProducts,
-    setTables,
-    setBusinessConfig
+    dismissNotification
   } = useReservation();
 
   useEffect(() => {
@@ -140,12 +137,6 @@ function AppContent() {
       {activeView === 'admin' && (
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" id="admin-view-module">
           <AdminPanel
-            businessConfig={businessConfig}
-            setBusinessConfig={setBusinessConfig}
-            tables={tables}
-            setTables={setTables}
-            menuProducts={menuProducts}
-            setMenuProducts={setMenuProducts}
             categories={INITIAL_CATEGORIES}
           />
         </main>

@@ -135,3 +135,41 @@ export function useUpdateBusinessConfig() {
     }
   });
 }
+
+export function useCreateMenuProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (product: MenuItem) => {
+      const row: Partial<MenuItemRow> & { id: string } = {
+        id: product.id,
+        nameEs: product.name.es,
+        nameEn: product.name.en,
+        descriptionEs: product.description.es,
+        descriptionEn: product.description.en,
+        price: String(product.price),
+        category: product.category,
+        image: product.image,
+        fallbackImage: product.fallbackImage ?? null,
+        active: product.active,
+        ingredientsEs: product.ingredients.es,
+        ingredientsEn: product.ingredients.en,
+        isSpecial: product.isSpecial,
+        preparationTime: product.preparationTime
+      };
+      return api.post<MenuItemRow>('/admin/menu', row);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.menu });
+    }
+  });
+}
+
+export function useDeleteMenuProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<null>(`/admin/menu/${id}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.menu });
+    }
+  });
+}

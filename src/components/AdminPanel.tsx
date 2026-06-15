@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, type Dispatch, type SetStateAction } from 'react';
-import { MenuItem, Category, ReservationTable, BusinessConfig } from '../types';
+import { useState } from 'react';
+import { Category } from '../types';
 import { useReservation } from '../context/ReservationContext';
-import { useAdminAuth, useAdminLogout, useReservationsQuery } from '../lib/queries';
+import { useAdminAuth, useAdminLogout, useReservationsQuery, useTablesQuery, useMenuQuery, useBusinessConfigQuery } from '../lib/queries';
 import { useQueryClient } from '@tanstack/react-query';
 import KanbanBoard from './admin/KanbanBoard';
 import MenuManager from './admin/MenuManager';
@@ -22,24 +22,10 @@ import {
 } from 'lucide-react';
 
 interface AdminPanelProps {
-  businessConfig: BusinessConfig;
-  setBusinessConfig: Dispatch<SetStateAction<BusinessConfig>>;
-  tables: ReservationTable[];
-  setTables: Dispatch<SetStateAction<ReservationTable[]>>;
-  menuProducts: MenuItem[];
-  setMenuProducts: Dispatch<SetStateAction<MenuItem[]>>;
   categories: Category[];
 }
 
-export default function AdminPanel({
-  businessConfig,
-  setBusinessConfig,
-  tables,
-  setTables,
-  menuProducts,
-  setMenuProducts,
-  categories
-}: AdminPanelProps) {
+export default function AdminPanel({ categories }: AdminPanelProps) {
   const { language } = useReservation();
   const isEs = language === 'es';
 
@@ -47,6 +33,8 @@ export default function AdminPanel({
   const { data: authData, isLoading: authLoading } = useAdminAuth();
   const logoutMutation = useAdminLogout();
   const reservationsQuery = useReservationsQuery();
+  const tablesQuery = useTablesQuery();
+  const menuQuery = useMenuQuery();
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const authenticated = authData?.authenticated ?? isAuthenticated;
@@ -65,10 +53,12 @@ export default function AdminPanel({
 
   // Computations for dashboard overview cards
   const reservationsData = reservationsQuery.data ?? [];
+  const tablesData = tablesQuery.data ?? [];
+  const menuProductsData = menuQuery.data ?? [];
   const totalRevenueSimulated = reservationsData
     .filter((r) => ['simulated_paid', 'success'].includes(r.paymentStatus) && r.status !== 'cancelled')
     .reduce((sum, r) => {
-      const tbl = tables.find((t) => t.id === r.tableId);
+      const tbl = tablesData.find((t) => t.id === r.tableId);
       const minFee = tbl?.minimumConsumption || 0;
       let preFee = 0;
       if (r.selectedOrderItems) {
@@ -178,7 +168,7 @@ export default function AdminPanel({
             <span className="text-[10px] text-espresso/60 uppercase font-bold tracking-wider">
               {isEs ? 'Platos Digitales' : 'Digital Menu Items'}
             </span>
-            <p className="text-2xl font-black font-serif text-espresso mt-0.5">{menuProducts.length}</p>
+            <p className="text-2xl font-black font-serif text-espresso mt-0.5">{menuProductsData.length}</p>
           </div>
         </div>
       </div>
@@ -188,8 +178,8 @@ export default function AdminPanel({
         {(Object.keys(tabLabels) as Array<keyof typeof tabLabels>).map((tabId) => {
           let count: number | undefined = undefined;
           if (tabId === 'reservations') count = reservationsData.length;
-          if (tabId === 'menu') count = menuProducts.length;
-          if (tabId === 'tables') count = tables.length;
+          if (tabId === 'menu') count = menuProductsData.length;
+          if (tabId === 'tables') count = tablesData.length;
 
           return (
             <button
@@ -216,8 +206,8 @@ export default function AdminPanel({
       {/* RENDER ACTIVE TAB */}
       {activeTab === 'reservations' && <KanbanBoard />}
       {activeTab === 'menu' && <MenuManager categories={categories} />}
-      {activeTab === 'tables' && <TablesManager tables={tables} setTables={setTables} />}
-      {activeTab === 'settings' && <SettingsPanel businessConfig={businessConfig} setBusinessConfig={setBusinessConfig} />}
+      {activeTab === 'tables' && <TablesManager />}
+      {activeTab === 'settings' && <SettingsPanel />}
     </div>
   );
 }
