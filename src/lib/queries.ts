@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api';
 import type { MenuItem, ReservationTable, BusinessConfig } from '../types';
 
@@ -127,3 +127,39 @@ export function useBusinessConfigQuery() {
 }
 
 export { ApiError };
+
+export interface AdminSession {
+  authenticated: boolean;
+  expiresAt?: string;
+  expired?: boolean;
+}
+
+export function useAdminAuth() {
+  return useQuery<AdminSession>({
+    queryKey: ['admin', 'me'],
+    queryFn: () => api.get<AdminSession>('/admin/me'),
+    retry: false,
+    staleTime: Infinity // sessions are invalidated explicitly
+  });
+}
+
+export function useAdminLogin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) =>
+      api.post<{ ok: boolean; expiresAt: string }>('/admin/login', { password }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['admin', 'me'] });
+    }
+  });
+}
+
+export function useAdminLogout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ ok: boolean }>('/admin/logout'),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['admin', 'me'] });
+    }
+  });
+}
