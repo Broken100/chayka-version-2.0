@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { MenuItem, ReservationTable, Reservation, BusinessConfig, Language, KanbanStage } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_TABLES, DEFAULT_BUSINESS_CONFIG } from '../data';
 import { NotificationMsg } from '../components/NotificationToast';
@@ -210,7 +210,7 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
   };
 
   // Notification actions
-  const addNotification = (title: string, message: string, type: 'success' | 'info' | 'alert') => {
+  const addNotification = useCallback((title: string, message: string, type: 'success' | 'info' | 'alert') => {
     const newNotif: NotificationMsg = {
       id: 'notif_' + Date.now(),
       title,
@@ -219,11 +219,11 @@ export function ReservationProvider({ children }: { children: React.ReactNode })
       time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
     };
     setNotifications((prev) => [newNotif, ...prev]);
-  };
+  }, []);
 
-  const dismissNotification = (id: string) => {
+  const dismissNotification = useCallback((id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
+  }, []);
 
   // Backwards-compatible setters that consumers still use. These will go away in PR#3.
   const setMenuProducts: React.Dispatch<React.SetStateAction<MenuItem[]>> = () => {
