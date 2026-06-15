@@ -25,7 +25,7 @@ describe('AdminPanel', () => {
     const { mockApi } = await import('../__mocks__/api');
     const origImpl = mockApi.get.mockImplementation;
 
-    mockApi.get.mockImplementation(async (path: string) => {
+    mockApi.get.mockImplementation(async (path: string): Promise<any> => {
       if (path === '/admin/me') throw new Error('Unauthorized');
       if (path === '/menu') return [];
       if (path === '/tables') return [];
