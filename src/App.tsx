@@ -15,6 +15,7 @@ import { t } from './utils/translations';
 
 import AppHeader from './components/layout/AppHeader';
 import AppFooter from './components/layout/AppFooter';
+import ErrorBoundary from './components/ErrorBoundary';
 import HeroBanner from './components/home/HeroBanner';
 import AttractionsSection from './components/home/AttractionsSection';
 import TraditionsBanner from './components/home/TraditionsBanner';
@@ -167,7 +168,9 @@ function AppContent() {
 export default function App() {
   return (
     <ReservationProvider>
-      <AppContent />
+      <ErrorBoundary>
+        <AppContent />
+      </ErrorBoundary>
     </ReservationProvider>
   );
 }

@@ -480,7 +480,7 @@ export default function BookingSection({
                           <div className="flex items-center gap-3 min-w-0">
                             <img
                               src={p.image}
-                              alt={p.name}
+                              alt={p.name[language] || p.name.es}
                               className="w-10 h-10 rounded-none object-cover flex-shrink-0 border border-editorial-charcoal/10 filter saturate-50"
                               referrerPolicy="no-referrer"
                             />
