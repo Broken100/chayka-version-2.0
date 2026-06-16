@@ -1,12 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api';
-import type { MenuItem, ReservationTable, Reservation, BusinessConfig } from '../types';
+import type { MenuItem, MenuCategory, TableAreaRow, ReservationTable, Reservation, BusinessConfig } from '../types';
 
 export const queryKeys = {
   menu: ['menu'] as const,
   tables: ['tables'] as const,
   businessConfig: ['business-config'] as const,
-  reservations: ['reservations'] as const
+  reservations: ['reservations'] as const,
+  menuCategories: ['menu-categories'] as const,
+  tableAreas: ['table-areas'] as const
 };
 
 /**
@@ -103,6 +105,48 @@ export function rowToBusinessConfig(row: BusinessConfigRow): BusinessConfig {
   };
 }
 
+export interface MenuCategoryRow {
+  id: string;
+  nameEs: string;
+  nameEn: string;
+  displayOrder: number;
+  active: boolean;
+  updatedAt: string | null;
+}
+
+export interface TableAreaApiRow {
+  id: string;
+  nameEs: string;
+  nameEn: string;
+  descriptionEs: string | null;
+  descriptionEn: string | null;
+  displayOrder: number;
+  active: boolean;
+  updatedAt: string | null;
+}
+
+export function rowToMenuCategory(row: MenuCategoryRow): MenuCategory {
+  return {
+    id: row.id,
+    name: { es: row.nameEs, en: row.nameEn },
+    displayOrder: row.displayOrder,
+    active: row.active
+  };
+}
+
+export function rowToTableArea(row: TableAreaApiRow): TableAreaRow {
+  return {
+    id: row.id,
+    name: { es: row.nameEs, en: row.nameEn },
+    description: {
+      es: row.descriptionEs ?? '',
+      en: row.descriptionEn ?? ''
+    },
+    displayOrder: row.displayOrder,
+    active: row.active
+  };
+}
+
 export function useMenuQuery() {
   return useQuery({
     queryKey: queryKeys.menu,
@@ -123,7 +167,32 @@ export function useBusinessConfigQuery() {
   return useQuery({
     queryKey: queryKeys.businessConfig,
     queryFn: () => api.get<BusinessConfigRow>('/business-config'),
-    select: rowToBusinessConfig
+    select: rowToBusinessConfig,
+    staleTime: 0 // D5: config is small, reflect admin edits immediately
+  });
+}
+
+export function useMenuCategoriesQuery(options?: { activeOnly?: boolean }) {
+  const activeOnly = options?.activeOnly ?? false;
+  return useQuery({
+    queryKey: queryKeys.menuCategories,
+    queryFn: () => api.get<MenuCategoryRow[]>('/menu-categories'),
+    select: (rows) => {
+      const mapped = rows.map(rowToMenuCategory);
+      return activeOnly ? mapped.filter((c) => c.active) : mapped;
+    }
+  });
+}
+
+export function useTableAreasQuery(options?: { activeOnly?: boolean }) {
+  const activeOnly = options?.activeOnly ?? false;
+  return useQuery({
+    queryKey: queryKeys.tableAreas,
+    queryFn: () => api.get<TableAreaApiRow[]>('/table-areas'),
+    select: (rows) => {
+      const mapped = rows.map(rowToTableArea);
+      return activeOnly ? mapped.filter((a) => a.active) : mapped;
+    }
   });
 }
 

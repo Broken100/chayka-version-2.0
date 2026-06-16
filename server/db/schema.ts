@@ -81,3 +81,23 @@ export const adminSessions = pgTable('admin_sessions', {
   createdAt: timestamp('created_at').defaultNow(),
   expiresAt: timestamp('expires_at').notNull()
 });
+
+export const menuCategories = pgTable('menu_categories', {
+  id: text('id').primaryKey(),
+  nameEs: text('name_es').notNull(),
+  nameEn: text('name_en').notNull(),
+  displayOrder: integer('display_order').notNull(),
+  active: boolean('active').notNull().default(true),
+  updatedAt: timestamp('updated_at').defaultNow()
+});
+
+export const tableAreas = pgTable('table_areas', {
+  id: text('id').primaryKey(),
+  nameEs: text('name_es').notNull(),
+  nameEn: text('name_en').notNull(),
+  descriptionEs: text('description_es'),
+  descriptionEn: text('description_en'),
+  displayOrder: integer('display_order').notNull(),
+  active: boolean('active').notNull().default(true),
+  updatedAt: timestamp('updated_at').defaultNow()
+});

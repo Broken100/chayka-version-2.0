@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { menuItems, tables, reservations, businessConfig } from '../db/schema.js';
+import { menuItems, tables, reservations, businessConfig, menuCategories, tableAreas } from '../db/schema.js';
 import { createReservationSchema } from '../lib/validation.js';
 import { generateReservationId } from '../lib/reservation-id.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
@@ -29,6 +29,25 @@ router.get(
   '/tables',
   asyncHandler(async (_req, res) => {
     const rows = await db.select().from(tables);
+    res.json(rows);
+  })
+);
+
+router.get(
+  '/menu-categories',
+  asyncHandler(async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(menuCategories)
+      .orderBy(asc(menuCategories.displayOrder));
+    res.json(rows);
+  })
+);
+
+router.get(
+  '/table-areas',
+  asyncHandler(async (_req, res) => {
+    const rows = await db.select().from(tableAreas).orderBy(asc(tableAreas.displayOrder));
     res.json(rows);
   })
 );

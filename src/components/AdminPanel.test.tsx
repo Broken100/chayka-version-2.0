@@ -2,11 +2,32 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '../test-utils';
 import AdminPanel from './AdminPanel';
 import {
-  INITIAL_CATEGORIES,
   INITIAL_TABLES,
   INITIAL_PRODUCTS,
   DEFAULT_BUSINESS_CONFIG,
 } from '../data';
+import type { Category } from '../types';
+
+const TEST_CATEGORIES: Category[] = [
+  {
+    id: 'hot_drinks',
+    name: { es: 'Bebidas Calientes', en: 'Hot Drinks' },
+    icon: 'Coffee',
+    description: { es: '', en: '' }
+  },
+  {
+    id: 'frappes',
+    name: { es: 'Frappés', en: 'Frappes' },
+    icon: 'Sparkles',
+    description: { es: '', en: '' }
+  },
+  {
+    id: 'soft_drinks',
+    name: { es: 'Bebidas Soft', en: 'Soft Drinks' },
+    icon: 'Flame',
+    description: { es: '', en: '' }
+  }
+];
 
 const defaultProps = {
   businessConfig: DEFAULT_BUSINESS_CONFIG,
@@ -15,7 +36,7 @@ const defaultProps = {
   setTables: vi.fn(),
   menuProducts: INITIAL_PRODUCTS,
   setMenuProducts: vi.fn(),
-  categories: INITIAL_CATEGORIES,
+  categories: TEST_CATEGORIES,
 };
 
 describe('AdminPanel', () => {
