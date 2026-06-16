@@ -53,6 +53,61 @@ export function useDeleteUploadedImage() {
   });
 }
 
+/**
+ * POST /api/admin/qr — multipart upload, returns `{ transfer_qr_url }`.
+ *
+ * Mirrors `uploadImageRaw` but targets the QR endpoint, which has different
+ * semantics: the previous file is removed server-side and `business_config`
+ * is updated in the same call. Invalidates the business-config query on
+ * success so `useBusinessConfigQuery` refetches.
+ */
+async function uploadQrRaw(file: File): Promise<{ transfer_qr_url: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/admin/qr', {
+    method: 'POST',
+    body: form,
+    credentials: 'include'
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) {
+    const message =
+      data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+        ? data.error
+        : `Upload failed with status ${res.status}`;
+    const err = new Error(message) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return data as { transfer_qr_url: string };
+}
+
+export function useUploadQr() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => uploadQrRaw(file),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.businessConfig });
+    }
+  });
+}
+
+/**
+ * DELETE /api/admin/qr — removes the current QR file from disk and nulls
+ * the `business_config.transfer_qr_url` column. Idempotent: returns 204
+ * even when no QR is set.
+ */
+export function useDeleteQr() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.del<null>('/admin/qr'),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.businessConfig });
+    }
+  });
+}
+
 export interface AddReservationInput {
   customerName: string;
   customerEmail: string;

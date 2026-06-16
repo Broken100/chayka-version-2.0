@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { CreditCard, Check, ShieldCheck, X, Sparkles, AlertOctagon, RefreshCw } from 'lucide-react';
 import { useReservation } from '../context/ReservationContext';
 import { useSimulatePayment } from '../lib/mutations';
+import { useBusinessConfigQuery } from '../lib/queries';
 import { t } from '../utils/translations';
 
 interface PaymentModalProps {
@@ -20,6 +21,8 @@ interface PaymentModalProps {
 
 export default function PaymentModal({ isOpen, onClose, onSuccess, amount, description }: PaymentModalProps) {
   const { language } = useReservation();
+  const { data: businessConfig } = useBusinessConfigQuery();
+  const transferQrUrl = businessConfig?.transferQrUrl ?? null;
   const [cardNumber, setCardNumber] = useState('');
   const [cardName, setCardName] = useState('');
   const [expiry, setExpiry] = useState('');
@@ -362,6 +365,22 @@ export default function PaymentModal({ isOpen, onClose, onSuccess, amount, descr
 
             {method === 'transfer' && (
               <div className="space-y-4">
+                {transferQrUrl && (
+                  <div className="flex flex-col items-center gap-2" id="payment-transfer-qr-wrap">
+                    <img
+                      src={transferQrUrl}
+                      alt={language === 'es' ? 'QR de transferencia' : 'Transfer QR'}
+                      width={200}
+                      height={200}
+                      className="w-[200px] h-[200px] object-contain border border-editorial-charcoal/15 rounded-none bg-white"
+                      id="payment-transfer-qr"
+                    />
+                    <span className="text-[9px] uppercase tracking-wider text-editorial-charcoal/50 font-bold">
+                      {language === 'es' ? 'Escanea para pagar' : 'Scan to pay'}
+                    </span>
+                  </div>
+                )}
+
                 <div className="bg-editorial-stone/25 p-4 border border-editorial-charcoal/10 text-xs text-editorial-charcoal/80 space-y-2">
                   <span className="font-bold text-editorial-charcoal uppercase text-[10px] tracking-wider block border-b border-editorial-charcoal/10 pb-1.5">
                     {language === 'es' ? 'Detalles de Cuenta Bancaria' : 'Bank Account Details'}
