@@ -1,30 +1,41 @@
 import React, { useState } from 'react';
-import { Reservation, KanbanStage } from '../../types';
+import { Reservation, KanbanStage, ServiceStatus } from '../../types';
 import { useReservation } from '../../context/ReservationContext';
-import { useReservationsQuery } from '../../lib/queries';
-import { useUpdateReservationStatus } from '../../lib/mutations';
+import { useReservationsQuery, rowToReservation } from '../../lib/queries';
+import {
+  useUpdateReservationStatus,
+  useCheckIn,
+  useStartService,
+  useCompleteService
+} from '../../lib/mutations';
 import { SkeletonCard } from '../Skeleton';
 import QueryError from '../QueryError';
 import { t } from '../../utils/translations';
-import { 
-  User, 
-  Phone, 
-  Mail, 
-  Calendar, 
-  Clock, 
-  Users, 
-  MapPin, 
+import {
+  User,
+  Phone,
+  Mail,
+  Calendar,
+  Clock,
+  Users,
+  MapPin,
   CreditCard,
   ChevronRight,
   ArrowRightLeft,
-  FileText
+  FileText,
+  LogIn,
+  Play,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function KanbanBoard() {
   const { tables, language, addNotification } = useReservation();
   const reservationsQuery = useReservationsQuery();
   const updateStatusMutation = useUpdateReservationStatus();
-  const reservations: Reservation[] = (reservationsQuery.data ?? []) as unknown as Reservation[];
+  const checkInMutation = useCheckIn();
+  const startServiceMutation = useStartService();
+  const completeServiceMutation = useCompleteService();
+  const reservations: Reservation[] = (reservationsQuery.data ?? []).map(rowToReservation);
 
   if (reservationsQuery.isLoading) {
     return (
@@ -137,6 +148,75 @@ export default function KanbanBoard() {
     }
   };
 
+  // PR#4: service status badge (4 colors: gray / blue / amber / emerald)
+  const getServiceStatusBadge = (status: ServiceStatus) => {
+    const labels: Record<ServiceStatus, { es: string; en: string }> = {
+      not_checked_in: { es: 'Sin registrar', en: 'Not checked in' },
+      checked_in: { es: 'Registrado', en: 'Checked in' },
+      in_service: { es: 'En servicio', en: 'In service' },
+      completed: { es: 'Completado', en: 'Completed' }
+    };
+    const classes: Record<ServiceStatus, string> = {
+      not_checked_in: 'bg-espresso/5 text-espresso/60 border-espresso/10',
+      checked_in: 'bg-blue-500/10 text-blue-800 border-blue-500/20',
+      in_service: 'bg-amber-500/10 text-amber-800 border-amber-500/20',
+      completed: 'bg-emerald-500/10 text-emerald-800 border-emerald-500/20'
+    };
+    return (
+      <span
+        className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${classes[status]}`}
+        data-testid={`service-badge-${status}`}
+      >
+        {labels[status][language]}
+      </span>
+    );
+  };
+
+  // PR#4: which service action buttons are valid for the current state.
+  // Buttons for invalid transitions are rendered disabled.
+  const renderServiceActions = (res: Reservation) => {
+    const ss = res.serviceStatus;
+    const buttonBase =
+      'inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+    return (
+      <div className="flex flex-wrap gap-1.5" data-testid={`service-actions-${res.id}`}>
+        <button
+          type="button"
+          onClick={() => checkInMutation.mutate(res.id)}
+          disabled={ss !== 'not_checked_in' || checkInMutation.isPending}
+          className={`${buttonBase} bg-blue-500/10 text-blue-800 border-blue-500/20 hover:bg-blue-500/20`}
+          id={`btn-checkin-${res.id}`}
+          title={language === 'es' ? 'Marcar entrada' : 'Mark check-in'}
+        >
+          <LogIn className="w-3 h-3" />
+          {language === 'es' ? 'Registrar' : 'Check In'}
+        </button>
+        <button
+          type="button"
+          onClick={() => startServiceMutation.mutate(res.id)}
+          disabled={ss !== 'checked_in' || startServiceMutation.isPending}
+          className={`${buttonBase} bg-amber-500/10 text-amber-800 border-amber-500/20 hover:bg-amber-500/20`}
+          id={`btn-start-${res.id}`}
+          title={language === 'es' ? 'Iniciar servicio' : 'Start service'}
+        >
+          <Play className="w-3 h-3" />
+          {language === 'es' ? 'Iniciar' : 'Start'}
+        </button>
+        <button
+          type="button"
+          onClick={() => completeServiceMutation.mutate(res.id)}
+          disabled={ss !== 'in_service' || completeServiceMutation.isPending}
+          className={`${buttonBase} bg-emerald-500/10 text-emerald-800 border-emerald-500/20 hover:bg-emerald-500/20`}
+          id={`btn-complete-${res.id}`}
+          title={language === 'es' ? 'Completar servicio' : 'Complete service'}
+        >
+          <CheckCircle2 className="w-3 h-3" />
+          {language === 'es' ? 'Completar' : 'Complete'}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4" id="kanban-board-container">
       <div className="flex items-center gap-2 text-xs text-espresso/60 bg-editorial-bg border border-espresso/10 p-3 rounded-xl">
@@ -195,6 +275,7 @@ export default function KanbanBoard() {
                         </span>
                         <div className="flex flex-col gap-1 items-end">
                           {getPaymentStatusBadge(res.paymentStatus)}
+                          {getServiceStatusBadge(res.serviceStatus)}
                         </div>
                       </div>
 
@@ -246,29 +327,39 @@ export default function KanbanBoard() {
                       )}
 
                       {/* Status Transition Select Dropdown */}
-                      <div className="pt-3 border-t border-espresso/5 flex items-center justify-between gap-2">
-                        <label className="text-[10px] uppercase font-bold text-espresso/50 tracking-wider">
-                          {t('admin.kanban.updateStatus', language)}
-                        </label>
-                        <select
-                          value={res.status}
-                          onChange={(e) => {
-                            const newStatus = e.target.value as KanbanStage;
-                            updateStatusMutation.mutate({ id: res.id, status: newStatus });
-                            const statusLabel = t(`admin.columns.${newStatus}`, language);
-                            addNotification(
-                              language === 'es' ? 'Estado Actualizado' : 'Status Updated',
-                              t('toasts.statusUpdated', language).replace('{status}', statusLabel),
-                              newStatus === 'cancelled' ? 'alert' : 'success'
-                            );
-                          }}
-                          className="bg-editorial-bg border border-espresso/20 text-espresso text-[11px] font-semibold py-1 px-2 rounded-lg focus:outline-none focus:border-ochre cursor-pointer"
-                          id={`kanban-select-${res.id}`}
-                        >
-                          <option value="pending">{t('admin.columns.pending', language)}</option>
-                          <option value="confirmed">{t('admin.columns.confirmed', language)}</option>
-                          <option value="cancelled">{t('admin.columns.cancelled', language)}</option>
-                        </select>
+                      <div className="pt-3 border-t border-espresso/5 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="text-[10px] uppercase font-bold text-espresso/50 tracking-wider">
+                            {t('admin.kanban.updateStatus', language)}
+                          </label>
+                          <select
+                            value={res.status}
+                            onChange={(e) => {
+                              const newStatus = e.target.value as KanbanStage;
+                              updateStatusMutation.mutate({ id: res.id, status: newStatus });
+                              const statusLabel = t(`admin.columns.${newStatus}`, language);
+                              addNotification(
+                                language === 'es' ? 'Estado Actualizado' : 'Status Updated',
+                                t('toasts.statusUpdated', language).replace('{status}', statusLabel),
+                                newStatus === 'cancelled' ? 'alert' : 'success'
+                              );
+                            }}
+                            className="bg-editorial-bg border border-espresso/20 text-espresso text-[11px] font-semibold py-1 px-2 rounded-lg focus:outline-none focus:border-ochre cursor-pointer"
+                            id={`kanban-select-${res.id}`}
+                          >
+                            <option value="pending">{t('admin.columns.pending', language)}</option>
+                            <option value="confirmed">{t('admin.columns.confirmed', language)}</option>
+                            <option value="cancelled">{t('admin.columns.cancelled', language)}</option>
+                          </select>
+                        </div>
+
+                        {/* PR#4: service-lifecycle action buttons */}
+                        <div className="pt-2 border-t border-espresso/5">
+                          <div className="text-[10px] uppercase font-bold text-espresso/50 tracking-wider mb-1.5">
+                            {language === 'es' ? 'Servicio' : 'Service'}
+                          </div>
+                          {renderServiceActions(res)}
+                        </div>
                       </div>
                     </div>
                   );

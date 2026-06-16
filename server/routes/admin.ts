@@ -1,6 +1,15 @@
-import { eq, and, count } from 'drizzle-orm';
+import { eq, and, count, desc } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { tables, reservations, businessConfig, menuItems, adminSessions, menuCategories, tableAreas } from '../db/schema.js';
+import {
+  tables,
+  reservations,
+  businessConfig,
+  menuItems,
+  adminSessions,
+  menuCategories,
+  tableAreas,
+  notifications
+} from '../db/schema.js';
 import {
   createTableSchema,
   updateTableSchema,
@@ -11,7 +20,8 @@ import {
   createMenuCategorySchema,
   updateMenuCategorySchema,
   createTableAreaSchema,
-  updateTableAreaSchema
+  updateTableAreaSchema,
+  notificationListQuerySchema
 } from '../lib/validation.js';
 import { requireAdmin, SESSION_COOKIE } from '../lib/auth.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
@@ -365,15 +375,45 @@ router.patch(
       res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
       return;
     }
+    // PR#4: capture the old status BEFORE the update so we can decide whether
+    // to write a notification. We do it in a single select+update flow; the
+    // race window (two admins changing at the same instant) is acceptable for
+    // a notification log.
+    const currentRows = await db
+      .select({ id: reservations.id, status: reservations.status })
+      .from(reservations)
+      .where(eq(reservations.id, req.params.id))
+      .limit(1);
+    if (currentRows.length === 0) {
+      res.status(404).json({ error: 'Reservation not found' });
+      return;
+    }
+    const oldStatus = currentRows[0]!.status;
+    const newStatus = parsed.data.status;
+
     const updated = await db
       .update(reservations)
-      .set({ status: parsed.data.status } as never)
+      .set({ status: newStatus } as never)
       .where(eq(reservations.id, req.params.id))
       .returning();
+
     if (updated.length === 0) {
       res.status(404).json({ error: 'Reservation not found' });
       return;
     }
+
+    // PR#4: only write a notification row when the status actually changed.
+    if (oldStatus !== newStatus) {
+      await db.insert(notifications).values({
+        type: 'reservation_status_changed',
+        titleEs: 'Estado Actualizado',
+        titleEn: 'Status Updated',
+        bodyEs: `Reserva ${req.params.id}: ${oldStatus} → ${newStatus}`,
+        bodyEn: `Reservation ${req.params.id}: ${oldStatus} → ${newStatus}`,
+        sourceReservationId: req.params.id
+      } as never);
+    }
+
     res.json(updated[0]);
   })
 );
@@ -573,6 +613,145 @@ router.delete(
     }
     res.status(204).end();
   })
+);
+
+// ─── Notifications (PR#4) ────────────────────────────────────────────────────
+
+// GET /api/admin/notifications?limit=50
+// Default 50, max 200. Ordered by created_at DESC.
+router.get(
+  '/notifications',
+  asyncHandler(async (req, res) => {
+    const parsed = notificationListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid query' });
+      return;
+    }
+    const rows = await db
+      .select()
+      .from(notifications)
+      .orderBy(desc(notifications.createdAt))
+      .limit(parsed.data.limit);
+    res.json(rows);
+  })
+);
+
+// POST /api/admin/notifications/:id/dismiss
+// Sets dismissed_at = now(). 204 on success, 404 if id is unknown.
+router.post(
+  '/notifications/:id/dismiss',
+  asyncHandler(async (req, res) => {
+    // The bigserial `id` is numeric. Reject obviously bad input early to
+    // avoid Postgres throwing on the cast.
+    const numericId = Number(req.params.id);
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(404).json({ error: 'Notification not found' });
+      return;
+    }
+    const updated = await db
+      .update(notifications)
+      .set({ dismissedAt: new Date() } as never)
+      .where(eq(notifications.id, numericId))
+      .returning({ id: notifications.id });
+    if (updated.length === 0) {
+      res.status(404).json({ error: 'Notification not found' });
+      return;
+    }
+    res.status(204).end();
+  })
+);
+
+// ─── Service tracking (PR#4) ─────────────────────────────────────────────────
+
+/**
+ * Single source of truth for the service state machine:
+ *   not_checked_in → checked_in → in_service → completed
+ * No backward transitions — anything else returns 409.
+ */
+type ServiceTransition = {
+  from: 'not_checked_in' | 'checked_in' | 'in_service' | 'completed';
+  to: 'not_checked_in' | 'checked_in' | 'in_service' | 'completed';
+  stampColumn: 'checkedInAt' | 'serviceStartedAt' | 'serviceCompletedAt';
+};
+
+const SERVICE_TRANSITIONS: Record<string, ServiceTransition> = {
+  '/reservations/:id/checkin': {
+    from: 'not_checked_in',
+    to: 'checked_in',
+    stampColumn: 'checkedInAt'
+  },
+  '/reservations/:id/start-service': {
+    from: 'checked_in',
+    to: 'in_service',
+    stampColumn: 'serviceStartedAt'
+  },
+  '/reservations/:id/complete-service': {
+    from: 'in_service',
+    to: 'completed',
+    stampColumn: 'serviceCompletedAt'
+  }
+};
+
+function applyServiceTransition(
+  req: Request,
+  res: Response,
+  transition: ServiceTransition
+): Promise<void> {
+  return (async () => {
+    const currentRows = await db
+      .select({
+        id: reservations.id,
+        serviceStatus: reservations.serviceStatus
+      })
+      .from(reservations)
+      .where(eq(reservations.id, req.params.id))
+      .limit(1);
+    if (currentRows.length === 0) {
+      res.status(404).json({ error: 'Reservation not found' });
+      return;
+    }
+    const current = currentRows[0]!.serviceStatus;
+    if (current !== transition.from) {
+      res.status(409).json({
+        error: `Invalid service transition: ${current} → ${transition.to}`
+      });
+      return;
+    }
+    const update: Record<string, unknown> = {
+      serviceStatus: transition.to,
+      [transition.stampColumn]: new Date()
+    };
+    const updated = await db
+      .update(reservations)
+      .set(update as never)
+      .where(eq(reservations.id, req.params.id))
+      .returning();
+    if (updated.length === 0) {
+      res.status(404).json({ error: 'Reservation not found' });
+      return;
+    }
+    res.json(updated[0]);
+  })();
+}
+
+router.post(
+  '/reservations/:id/checkin',
+  asyncHandler((req, res) => applyServiceTransition(req, res, SERVICE_TRANSITIONS['/reservations/:id/checkin']!))
+);
+
+router.post(
+  '/reservations/:id/start-service',
+  asyncHandler((req, res) =>
+    applyServiceTransition(req, res, SERVICE_TRANSITIONS['/reservations/:id/start-service']!)
+  )
+);
+
+router.post(
+  '/reservations/:id/complete-service',
+  asyncHandler((req, res) =>
+    applyServiceTransition(req, res, SERVICE_TRANSITIONS['/reservations/:id/complete-service']!)
+  )
 );
 
 export default router;

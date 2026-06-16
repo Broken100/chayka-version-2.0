@@ -10,6 +10,9 @@ export type Language = 'es' | 'en';
 export type KanbanStage = 'pending' | 'confirmed' | 'cancelled';
 export type PaymentStatus = 'pending' | 'success' | 'failed' | 'simulated_paid' | 'unpaid';
 
+// PR#4: 4-state service lifecycle. Orthogonal to KanbanStage.
+export type ServiceStatus = 'not_checked_in' | 'checked_in' | 'in_service' | 'completed';
+
 export type BilingualText = {
   es: string;
   en: string;
@@ -87,6 +90,24 @@ export interface Reservation {
   notes?: string;
   timestamp: string;
   selectedOrderItems?: { menuItemId: string; quantity: number; price: number }[];
+  // PR#4: service lifecycle fields
+  serviceStatus: ServiceStatus;
+  checkedInAt?: string | null;
+  serviceStartedAt?: string | null;
+  serviceCompletedAt?: string | null;
+}
+
+// PR#4: a single notification row from the admin feed.
+export interface Notification {
+  id: number;
+  type: 'reservation_created' | 'reservation_status_changed';
+  titleEs: string;
+  titleEn: string;
+  bodyEs: string;
+  bodyEn: string;
+  sourceReservationId: string | null;
+  dismissedAt: string | null;
+  createdAt: string;
 }
 
 export interface BusinessConfig {
