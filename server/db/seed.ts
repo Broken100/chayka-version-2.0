@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { db } from './client.js';
-import { menuItems, tables, businessConfig } from './schema.js';
+import { menuItems, tables, businessConfig, menuCategories, tableAreas } from './schema.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -144,6 +144,89 @@ async function seed() {
         updatedAt: new Date()
       } as never
     });
+
+  // Seed menu categories (idempotent — only seeds when table is empty).
+  const existingCategories = await db.select({ id: menuCategories.id }).from(menuCategories);
+  if (existingCategories.length === 0) {
+    console.log('Seeding 3 menu categories...');
+    const categoryRows = [
+      {
+        id: 'hot_drinks',
+        nameEs: 'Bebidas Calientes',
+        nameEn: 'Hot Drinks',
+        displayOrder: 1,
+        active: true
+      },
+      {
+        id: 'frappes',
+        nameEs: 'Frappés',
+        nameEn: 'Frappes',
+        displayOrder: 2,
+        active: true
+      },
+      {
+        id: 'soft_drinks',
+        nameEs: 'Bebidas Soft',
+        nameEn: 'Soft Drinks',
+        displayOrder: 3,
+        active: true
+      }
+    ];
+    for (const row of categoryRows) {
+      await db.insert(menuCategories).values(row as never);
+    }
+  } else {
+    console.log(`Skipping menu categories seed (${existingCategories.length} existing rows).`);
+  }
+
+  // Seed table areas (idempotent — only seeds when table is empty).
+  const existingAreas = await db.select({ id: tableAreas.id }).from(tableAreas);
+  if (existingAreas.length === 0) {
+    console.log('Seeding 4 table areas...');
+    const areaRows = [
+      {
+        id: 'waterfall_deck',
+        nameEs: 'Mirador Cascada',
+        nameEn: 'Waterfall Deck',
+        descriptionEs: 'Brisa refrescante, senderos florales con vista directa a la Cascada de Peguche.',
+        descriptionEn: 'Refreshing breeze, floral paths with direct view of the Peguche Waterfall.',
+        displayOrder: 1,
+        active: true
+      },
+      {
+        id: 'fireplace_cozy',
+        nameEs: 'Chimenea Acogedora',
+        nameEn: 'Fireplace Cozy',
+        descriptionEs: 'Calor de hogar con fogón a leña, sillones de cuero y música acústica andina.',
+        descriptionEn: 'Home warmth with wood stove, leather armchairs, and acoustic Andean music.',
+        displayOrder: 2,
+        active: true
+      },
+      {
+        id: 'indoor_premium',
+        nameEs: 'Interior Premium',
+        nameEn: 'Indoor Premium',
+        descriptionEs: 'Arquitectura rústica de madera tallada y piedra volcánica del norte de Otavalo.',
+        descriptionEn: 'Rustic architecture of carved wood and volcanic stone from northern Otavalo.',
+        displayOrder: 3,
+        active: true
+      },
+      {
+        id: 'terrace_panoramic',
+        nameEs: 'Terraza Panorámica',
+        nameEn: 'Terrace Panoramic',
+        descriptionEs: 'Vista 360° al Cerro Imbabura y los valles sagrados, ideal para atardeceres mágicos.',
+        descriptionEn: '360° view of Cerro Imbabura and sacred valleys, ideal for magical sunsights.',
+        displayOrder: 4,
+        active: true
+      }
+    ];
+    for (const row of areaRows) {
+      await db.insert(tableAreas).values(row as never);
+    }
+  } else {
+    console.log(`Skipping table areas seed (${existingAreas.length} existing rows).`);
+  }
 
   console.log('Seed complete.');
   process.exit(0);
