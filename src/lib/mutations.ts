@@ -3,6 +3,56 @@ import { api } from './api';
 import { queryKeys, type MenuItemRow, type TableRow, type BusinessConfigRow } from './queries';
 import type { MenuItem, ReservationTable, BusinessConfig, KanbanStage } from '../types';
 
+/**
+ * POST /api/admin/uploads — multipart upload, returns `{ url: '/uploads/<file>' }`.
+ *
+ * `api` is JSON-only; this helper bypasses it so we can ship FormData with the
+ * file blob. Credentials are included so the admin session cookie is sent.
+ */
+async function uploadImageRaw(file: File): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/admin/uploads', {
+    method: 'POST',
+    body: form,
+    credentials: 'include'
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) {
+    const message =
+      data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+        ? data.error
+        : `Upload failed with status ${res.status}`;
+    const err = new Error(message) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return data as { url: string };
+}
+
+export function useUploadImage() {
+  return useMutation({
+    mutationFn: (file: File) => uploadImageRaw(file)
+  });
+}
+
+/**
+ * DELETE /api/admin/uploads/:filename — extract the trailing filename from a
+ * stored `/uploads/<file>` URL so callers can pass the value they got from
+ * `useUploadImage`.
+ */
+export function useDeleteUploadedImage() {
+  return useMutation({
+    mutationFn: (urlOrFilename: string) => {
+      const filename = urlOrFilename.startsWith('/uploads/')
+        ? urlOrFilename.slice('/uploads/'.length)
+        : urlOrFilename;
+      return api.del<null>(`/admin/uploads/${encodeURIComponent(filename)}`);
+    }
+  });
+}
+
 export interface AddReservationInput {
   customerName: string;
   customerEmail: string;
