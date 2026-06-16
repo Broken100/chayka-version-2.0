@@ -1,4 +1,16 @@
-import { pgTable, text, numeric, boolean, integer, jsonb, timestamp, date, pgEnum } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  text,
+  numeric,
+  boolean,
+  integer,
+  bigserial,
+  jsonb,
+  timestamp,
+  date,
+  pgEnum,
+  index
+} from 'drizzle-orm/pg-core';
 
 export const tableAreaEnum = pgEnum('table_area', [
   'waterfall_deck',
@@ -15,6 +27,15 @@ export const paymentStatusEnum = pgEnum('payment_status', [
   'failed',
   'simulated_paid',
   'unpaid'
+]);
+
+// PR#4: 4-state service lifecycle (orthogonal to kanban `status`).
+// not_checked_in → checked_in → in_service → completed (no backward transitions).
+export const serviceStatusEnum = pgEnum('service_status', [
+  'not_checked_in',
+  'checked_in',
+  'in_service',
+  'completed'
 ]);
 
 export const menuItems = pgTable('menu_items', {
@@ -60,8 +81,34 @@ export const reservations = pgTable('reservations', {
   paymentReference: text('payment_reference'),
   notes: text('notes'),
   selectedOrderItems: jsonb('selected_order_items'),
+  // PR#4: service lifecycle. Defaults to `not_checked_in` so existing rows are valid.
+  serviceStatus: serviceStatusEnum('service_status').notNull().default('not_checked_in'),
+  checkedInAt: timestamp('checked_in_at'),
+  serviceStartedAt: timestamp('service_started_at'),
+  serviceCompletedAt: timestamp('service_completed_at'),
   createdAt: timestamp('created_at').defaultNow()
 });
+
+// PR#4: persisted notification log. D4: only 2 events fire today
+// (reservation_created, reservation_status_changed), but the schema is open.
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    type: text('type').notNull(),
+    titleEs: text('title_es').notNull(),
+    titleEn: text('title_en').notNull(),
+    bodyEs: text('body_es').notNull(),
+    bodyEn: text('body_en').notNull(),
+    sourceReservationId: text('source_reservation_id'),
+    dismissedAt: timestamp('dismissed_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow()
+  },
+  (table) => ({
+    // Admin GET is ordered created_at DESC; index keeps it cheap as the table grows.
+    createdAtIdx: index('notifications_created_at_idx').on(table.createdAt.desc())
+  })
+);
 
 export const businessConfig = pgTable('business_config', {
   id: integer('id').primaryKey().default(1),
