@@ -1,6 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api';
-import type { MenuItem, MenuCategory, TableAreaRow, ReservationTable, Reservation, BusinessConfig } from '../types';
+import type {
+  MenuItem,
+  MenuCategory,
+  TableAreaRow,
+  ReservationTable,
+  Reservation,
+  BusinessConfig,
+  Notification,
+  ServiceStatus
+} from '../types';
 
 export const queryKeys = {
   menu: ['menu'] as const,
@@ -8,7 +17,8 @@ export const queryKeys = {
   businessConfig: ['business-config'] as const,
   reservations: ['reservations'] as const,
   menuCategories: ['menu-categories'] as const,
-  tableAreas: ['table-areas'] as const
+  tableAreas: ['table-areas'] as const,
+  notifications: ['notifications'] as const
 };
 
 /**
@@ -216,6 +226,11 @@ export interface ReservationRow {
   notes: string | null;
   selectedOrderItems: Array<{ productId: string; name: string; price: number; quantity: number }> | null;
   timestamp: string;
+  // PR#4: service lifecycle fields
+  serviceStatus: string;
+  checkedInAt: string | null;
+  serviceStartedAt: string | null;
+  serviceCompletedAt: string | null;
 }
 
 export function useReservationsQuery() {
@@ -225,10 +240,69 @@ export function useReservationsQuery() {
   });
 }
 
+/**
+ * Pure mapper from a server `ReservationRow` to the app's `Reservation` shape.
+ * Coerces the raw `serviceStatus` string into the `ServiceStatus` union and
+ * defaults to `not_checked_in` when the column is missing on legacy rows.
+ */
+export function rowToReservation(row: ReservationRow): Reservation {
+  const serviceStatus: ServiceStatus =
+    row.serviceStatus === 'checked_in' ||
+    row.serviceStatus === 'in_service' ||
+    row.serviceStatus === 'completed'
+      ? row.serviceStatus
+      : 'not_checked_in';
+  // The server's `selectedOrderItems` row uses `productId`; the app's
+  // `Reservation` type uses `menuItemId` (legacy naming). Map it.
+  const selectedOrderItems = row.selectedOrderItems?.map((item) => ({
+    menuItemId: (item as { productId?: string; menuItemId?: string }).menuItemId ?? item.productId ?? '',
+    quantity: item.quantity,
+    price: item.price
+  }));
+  return {
+    id: row.id,
+    customerName: row.customerName,
+    customerEmail: row.customerEmail,
+    customerPhone: row.customerPhone,
+    date: row.date,
+    timeSlot: row.timeSlot,
+    tableId: row.tableId,
+    area: row.area as Reservation['area'],
+    guestsCount: row.guestsCount,
+    status: row.status as Reservation['status'],
+    paymentStatus: row.paymentStatus as Reservation['paymentStatus'],
+    paymentReference: row.paymentReference ?? undefined,
+    notes: row.notes ?? undefined,
+    timestamp: row.timestamp,
+    selectedOrderItems,
+    serviceStatus,
+    checkedInAt: row.checkedInAt,
+    serviceStartedAt: row.serviceStartedAt,
+    serviceCompletedAt: row.serviceCompletedAt
+  };
+}
+
+/**
+ * Counts the reservations currently in the `in_service` state. Used by the
+ * "Currently In Service" KPI tile in the AdminPanel.
+ */
+export function countInService(reservations: ReadonlyArray<{ serviceStatus?: string }>): number {
+  return reservations.filter((r) => r.serviceStatus === 'in_service').length;
+}
+
 export interface AdminSession {
   authenticated: boolean;
   expiresAt?: string;
   expired?: boolean;
+}
+
+// PR#4: notifications feed for the AdminPanel "Notificaciones" tab.
+export function useNotificationsQuery(options?: { limit?: number }) {
+  const limit = options?.limit ?? 50;
+  return useQuery<Notification[]>({
+    queryKey: [...queryKeys.notifications, limit],
+    queryFn: () => api.get<Notification[]>(`/admin/notifications?limit=${limit}`)
+  });
 }
 
 export function useAdminAuth() {

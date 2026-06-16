@@ -171,6 +171,8 @@ export default function BookingSection({
       paymentStatus: reference ? 'simulated_paid' : 'unpaid',
       paymentReference: reference,
       notes,
+      // PR#4: a brand-new reservation starts in `not_checked_in`.
+      serviceStatus: 'not_checked_in',
       timestamp: new Date().toISOString(),
       selectedOrderItems: Object.entries(preorders)
         .filter(([_, qty]) => (qty as number) > 0)

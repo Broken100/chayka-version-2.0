@@ -398,3 +398,32 @@ export function useDeleteTableArea() {
     }
   });
 }
+
+// ─── Notifications + service tracking (PR#4) ─────────────────────────────────
+
+export function useDismissNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.post<null>(`/admin/notifications/${id}/dismiss`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.notifications });
+    }
+  });
+}
+
+function useServiceTransition(action: 'checkin' | 'start-service' | 'complete-service') {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<null>(`/admin/reservations/${id}/${action}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.reservations });
+      // The service-status change also implicitly creates a notification
+      // (future enhancement), so refresh the feed too.
+      void qc.invalidateQueries({ queryKey: queryKeys.notifications });
+    }
+  });
+}
+
+export const useCheckIn = () => useServiceTransition('checkin');
+export const useStartService = () => useServiceTransition('start-service');
+export const useCompleteService = () => useServiceTransition('complete-service');
