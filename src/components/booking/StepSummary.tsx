@@ -6,6 +6,13 @@
 import { Reservation, ReservationTable, MenuItem } from '../../types';
 import { TableArea } from '../../types';
 import { useReservation } from '../../context/ReservationContext';
+import { t } from '../../utils/translations';
+import {
+  buildWhatsAppMessage,
+  buildWhatsappUrl,
+  useSendWhatsappLink,
+  type WhatsappPaymentMethod
+} from '../../lib/whatsapp';
 import { Send, Receipt, CheckCircle } from 'lucide-react';
 
 interface StepSummaryProps {
@@ -15,9 +22,20 @@ interface StepSummaryProps {
   totalToPay: number;
   preorderedItemsList: { product?: MenuItem; quantity: number; subtotal: number }[];
   preordersTotal: number;
-  getWhatsAppLink: () => string;
   copyReceiptToClipboard: () => void;
   onReset: () => void;
+}
+
+/**
+ * Map a reservation's `paymentReference` to the per-method WhatsApp template
+ * key. Mirrors the existing `renderPaymentMethod` logic in this component so
+ * the CTA's template matches the visible badge.
+ */
+function paymentMethodFromReference(ref: string | undefined): WhatsappPaymentMethod {
+  if (ref && ref.startsWith('TRF-')) return 'transfer';
+  if (ref === 'EFECTIVO-LOCAL') return 'cash';
+  if (ref && ref.startsWith('PAY-')) return 'card';
+  return 'cash';
 }
 
 export default function StepSummary({
@@ -27,11 +45,20 @@ export default function StepSummary({
   totalToPay,
   preorderedItemsList,
   preordersTotal,
-  getWhatsAppLink,
   copyReceiptToClipboard,
   onReset
 }: StepSummaryProps) {
-  const { language } = useReservation();
+  const { language, businessConfig } = useReservation();
+  const sendWhatsappLink = useSendWhatsappLink();
+
+  const paymentMethod = paymentMethodFromReference(completedBooking.paymentReference);
+  const whatsappNumber = businessConfig.whatsappNumber;
+  const message = buildWhatsAppMessage({
+    paymentMethod,
+    language,
+    reservation: { id: completedBooking.id }
+  });
+  const whatsappHref = buildWhatsappUrl(message, whatsappNumber);
 
   const tableName = selectedTable
     ? (selectedTable.name[language] || selectedTable.name.es)
@@ -168,14 +195,21 @@ export default function StepSummary({
       {/* WhatsApp actions buttons */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto pt-2" id="whatsapp-integration-buttons">
         <a
-          href={getWhatsAppLink()}
+          href={whatsappHref}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() =>
+            sendWhatsappLink({
+              paymentMethod,
+              reservationId: completedBooking.id,
+              whatsappNumber
+            })
+          }
           className="bg-emerald-800 hover:bg-emerald-700 text-editorial-bg font-bold py-3.5 px-4 rounded-none flex items-center justify-center gap-2 transition-all cursor-pointer text-xs uppercase tracking-widest"
           id="whatsapp-confirm-anchor"
         >
           <Send className="w-4 h-4 fill-editorial-bg text-editorial-bg" />
-          <span>{language === 'es' ? 'Enviar a Whatsapp' : 'Send to WhatsApp'}</span>
+          <span>{t('whatsapp.send', language)}</span>
         </a>
 
         <button

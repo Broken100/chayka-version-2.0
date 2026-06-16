@@ -8,6 +8,7 @@ import {
   useStartService,
   useCompleteService
 } from '../../lib/mutations';
+import { useSendWhatsappLink, type WhatsappPaymentMethod } from '../../lib/whatsapp';
 import { SkeletonCard } from '../Skeleton';
 import QueryError from '../QueryError';
 import { t } from '../../utils/translations';
@@ -25,16 +26,31 @@ import {
   FileText,
   LogIn,
   Play,
-  CheckCircle2
+  CheckCircle2,
+  MessageCircle
 } from 'lucide-react';
 
+/**
+ * Map a reservation's `paymentReference` to the per-method WhatsApp template
+ * key. Mirrors the same detection in `StepSummary.renderPaymentMethod` so the
+ * resend template matches the visible payment badge.
+ */
+function paymentMethodFromReservation(res: Reservation): WhatsappPaymentMethod {
+  const ref = res.paymentReference ?? '';
+  if (ref.startsWith('TRF-')) return 'transfer';
+  if (ref === 'EFECTIVO-LOCAL') return 'cash';
+  if (ref.startsWith('PAY-')) return 'card';
+  return 'cash';
+}
+
 export default function KanbanBoard() {
-  const { tables, language, addNotification } = useReservation();
+  const { tables, language, businessConfig, addNotification } = useReservation();
   const reservationsQuery = useReservationsQuery();
   const updateStatusMutation = useUpdateReservationStatus();
   const checkInMutation = useCheckIn();
   const startServiceMutation = useStartService();
   const completeServiceMutation = useCompleteService();
+  const sendWhatsappLink = useSendWhatsappLink();
   const reservations: Reservation[] = (reservationsQuery.data ?? []).map(rowToReservation);
 
   if (reservationsQuery.isLoading) {
@@ -217,6 +233,31 @@ export default function KanbanBoard() {
     );
   };
 
+  // PR#5: re-send the wa.me link for a reservation. Hidden when no number is
+  // configured. Per-method template is picked from `paymentReference`.
+  const renderResendWhatsapp = (res: Reservation) => {
+    if (!businessConfig.whatsappNumber) return null;
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          sendWhatsappLink({
+            paymentMethod: paymentMethodFromReservation(res),
+            reservationId: res.id,
+            whatsappNumber: businessConfig.whatsappNumber
+          })
+        }
+        className="w-full inline-flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded border border-emerald-600/30 bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+        data-testid={`btn-resend-whatsapp-${res.id}`}
+        id={`btn-resend-whatsapp-${res.id}`}
+        title={t('whatsapp.resend', language)}
+      >
+        <MessageCircle className="w-3 h-3" />
+        {t('whatsapp.resend', language)}
+      </button>
+    );
+  };
+
   return (
     <div className="space-y-4" id="kanban-board-container">
       <div className="flex items-center gap-2 text-xs text-espresso/60 bg-editorial-bg border border-espresso/10 p-3 rounded-xl">
@@ -360,6 +401,13 @@ export default function KanbanBoard() {
                           </div>
                           {renderServiceActions(res)}
                         </div>
+
+                        {/* PR#5: re-send the WhatsApp confirmation (wa.me, client-side) */}
+                        {renderResendWhatsapp(res) && (
+                          <div className="pt-2 border-t border-espresso/5">
+                            {renderResendWhatsapp(res)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
