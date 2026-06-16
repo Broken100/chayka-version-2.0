@@ -1,7 +1,119 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
-import { queryKeys, type MenuItemRow, type TableRow, type BusinessConfigRow } from './queries';
-import type { MenuItem, ReservationTable, BusinessConfig, KanbanStage } from '../types';
+import {
+  queryKeys,
+  type MenuItemRow,
+  type TableRow,
+  type BusinessConfigRow,
+  type MenuCategoryRow,
+  type TableAreaApiRow
+} from './queries';
+import type { MenuItem, MenuCategory, TableAreaRow, ReservationTable, BusinessConfig, KanbanStage } from '../types';
+
+/**
+ * POST /api/admin/uploads — multipart upload, returns `{ url: '/uploads/<file>' }`.
+ *
+ * `api` is JSON-only; this helper bypasses it so we can ship FormData with the
+ * file blob. Credentials are included so the admin session cookie is sent.
+ */
+async function uploadImageRaw(file: File): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/admin/uploads', {
+    method: 'POST',
+    body: form,
+    credentials: 'include'
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) {
+    const message =
+      data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+        ? data.error
+        : `Upload failed with status ${res.status}`;
+    const err = new Error(message) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return data as { url: string };
+}
+
+export function useUploadImage() {
+  return useMutation({
+    mutationFn: (file: File) => uploadImageRaw(file)
+  });
+}
+
+/**
+ * DELETE /api/admin/uploads/:filename — extract the trailing filename from a
+ * stored `/uploads/<file>` URL so callers can pass the value they got from
+ * `useUploadImage`.
+ */
+export function useDeleteUploadedImage() {
+  return useMutation({
+    mutationFn: (urlOrFilename: string) => {
+      const filename = urlOrFilename.startsWith('/uploads/')
+        ? urlOrFilename.slice('/uploads/'.length)
+        : urlOrFilename;
+      return api.del<null>(`/admin/uploads/${encodeURIComponent(filename)}`);
+    }
+  });
+}
+
+/**
+ * POST /api/admin/qr — multipart upload, returns `{ transfer_qr_url }`.
+ *
+ * Mirrors `uploadImageRaw` but targets the QR endpoint, which has different
+ * semantics: the previous file is removed server-side and `business_config`
+ * is updated in the same call. Invalidates the business-config query on
+ * success so `useBusinessConfigQuery` refetches.
+ */
+async function uploadQrRaw(file: File): Promise<{ transfer_qr_url: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/admin/qr', {
+    method: 'POST',
+    body: form,
+    credentials: 'include'
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) {
+    const message =
+      data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+        ? data.error
+        : `Upload failed with status ${res.status}`;
+    const err = new Error(message) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return data as { transfer_qr_url: string };
+}
+
+export function useUploadQr() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => uploadQrRaw(file),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.businessConfig });
+    }
+  });
+}
+
+/**
+ * DELETE /api/admin/qr — removes the current QR file from disk and nulls
+ * the `business_config.transfer_qr_url` column. Idempotent: returns 204
+ * even when no QR is set.
+ */
+export function useDeleteQr() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.del<null>('/admin/qr'),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.businessConfig });
+    }
+  });
+}
 
 export interface AddReservationInput {
   customerName: string;
@@ -192,3 +304,126 @@ export function useSimulatePayment() {
       api.post<SimulatePaymentResult>('/payments/simulate', input)
   });
 }
+
+// ─── Menu categories CRUD ─────────────────────────────────────────────────────
+
+export interface CreateMenuCategoryInput {
+  id: string;
+  name: { es: string; en: string };
+  displayOrder: number;
+}
+
+export interface UpdateMenuCategoryInput {
+  name?: { es?: string; en?: string };
+  displayOrder?: number;
+  active?: boolean;
+}
+
+export function useCreateMenuCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateMenuCategoryInput) =>
+      api.post<MenuCategoryRow>('/admin/menu-categories', input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.menuCategories });
+    }
+  });
+}
+
+export function useUpdateMenuCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateMenuCategoryInput }) =>
+      api.put<MenuCategoryRow>(`/admin/menu-categories/${id}`, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.menuCategories });
+    }
+  });
+}
+
+export function useDeleteMenuCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<null>(`/admin/menu-categories/${id}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.menuCategories });
+    }
+  });
+}
+
+// ─── Table areas CRUD ─────────────────────────────────────────────────────────
+
+export interface CreateTableAreaInput {
+  id: string;
+  name: { es: string; en: string };
+  description?: { es?: string; en?: string };
+  displayOrder: number;
+}
+
+export interface UpdateTableAreaInput {
+  name?: { es?: string; en?: string };
+  description?: { es?: string; en?: string };
+  displayOrder?: number;
+  active?: boolean;
+}
+
+export function useCreateTableArea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTableAreaInput) =>
+      api.post<TableAreaApiRow>('/admin/table-areas', input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.tableAreas });
+    }
+  });
+}
+
+export function useUpdateTableArea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateTableAreaInput }) =>
+      api.put<TableAreaApiRow>(`/admin/table-areas/${id}`, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.tableAreas });
+    }
+  });
+}
+
+export function useDeleteTableArea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<null>(`/admin/table-areas/${id}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.tableAreas });
+    }
+  });
+}
+
+// ─── Notifications + service tracking (PR#4) ─────────────────────────────────
+
+export function useDismissNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.post<null>(`/admin/notifications/${id}/dismiss`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.notifications });
+    }
+  });
+}
+
+function useServiceTransition(action: 'checkin' | 'start-service' | 'complete-service') {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<null>(`/admin/reservations/${id}/${action}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.reservations });
+      // The service-status change also implicitly creates a notification
+      // (future enhancement), so refresh the feed too.
+      void qc.invalidateQueries({ queryKey: queryKeys.notifications });
+    }
+  });
+}
+
+export const useCheckIn = () => useServiceTransition('checkin');
+export const useStartService = () => useServiceTransition('start-service');
+export const useCompleteService = () => useServiceTransition('complete-service');

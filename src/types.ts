@@ -10,6 +10,9 @@ export type Language = 'es' | 'en';
 export type KanbanStage = 'pending' | 'confirmed' | 'cancelled';
 export type PaymentStatus = 'pending' | 'success' | 'failed' | 'simulated_paid' | 'unpaid';
 
+// PR#4: 4-state service lifecycle. Orthogonal to KanbanStage.
+export type ServiceStatus = 'not_checked_in' | 'checked_in' | 'in_service' | 'completed';
+
 export type BilingualText = {
   es: string;
   en: string;
@@ -45,6 +48,22 @@ export interface Category {
   description: BilingualText;
 }
 
+export interface MenuCategory {
+  id: string;
+  name: BilingualText;
+  displayOrder: number;
+  active: boolean;
+  icon?: string; // Local icon-name → Lucide map, kept client-side
+}
+
+export interface TableAreaRow {
+  id: string;
+  name: BilingualText;
+  description?: BilingualText;
+  displayOrder: number;
+  active: boolean;
+}
+
 export type TableArea = 'waterfall_deck' | 'fireplace_cozy' | 'indoor_premium' | 'terrace_panoramic';
 
 export interface ReservationTable {
@@ -71,6 +90,24 @@ export interface Reservation {
   notes?: string;
   timestamp: string;
   selectedOrderItems?: { menuItemId: string; quantity: number; price: number }[];
+  // PR#4: service lifecycle fields
+  serviceStatus: ServiceStatus;
+  checkedInAt?: string | null;
+  serviceStartedAt?: string | null;
+  serviceCompletedAt?: string | null;
+}
+
+// PR#4: a single notification row from the admin feed.
+export interface Notification {
+  id: number;
+  type: 'reservation_created' | 'reservation_status_changed';
+  titleEs: string;
+  titleEn: string;
+  bodyEs: string;
+  bodyEn: string;
+  sourceReservationId: string | null;
+  dismissedAt: string | null;
+  createdAt: string;
 }
 
 export interface BusinessConfig {
@@ -85,6 +122,7 @@ export interface BusinessConfig {
     hours: string;
   }[];
   timeSlots: string[]; // ["08:30", "10:00", "11:30", "13:00", "14:30", "16:00", "17:30", "19:00"]
+  transferQrUrl: string | null; // "/uploads/<uuid>.<ext>" or null
 }
 
 export interface ReservationContextType {

@@ -6,23 +6,27 @@
 import { useState } from 'react';
 import { Category } from '../types';
 import { useReservation } from '../context/ReservationContext';
-import { useAdminAuth, useAdminLogout, useReservationsQuery, useTablesQuery, useMenuQuery, useBusinessConfigQuery } from '../lib/queries';
+import { useAdminAuth, useAdminLogout, useReservationsQuery, useTablesQuery, useMenuQuery, useBusinessConfigQuery, useNotificationsQuery, countInService } from '../lib/queries';
 import { useQueryClient } from '@tanstack/react-query';
 import KanbanBoard from './admin/KanbanBoard';
 import MenuManager from './admin/MenuManager';
 import AdminLogin from './admin/AdminLogin';
 import TablesManager from './admin/TablesManager';
 import SettingsPanel from './admin/SettingsPanel';
+import CategoryManager from './admin/CategoryManager';
+import NotificationHistory from './admin/NotificationHistory';
 import {
   Calendar,
   Coffee,
   TrendingUp,
   Power,
-  Clock
+  Clock,
+  Bell,
+  Utensils
 } from 'lucide-react';
 
 interface AdminPanelProps {
-  categories: Category[];
+  categories?: Category[];
 }
 
 export default function AdminPanel({ categories }: AdminPanelProps) {
@@ -35,6 +39,7 @@ export default function AdminPanel({ categories }: AdminPanelProps) {
   const reservationsQuery = useReservationsQuery();
   const tablesQuery = useTablesQuery();
   const menuQuery = useMenuQuery();
+  const notificationsQuery = useNotificationsQuery({ limit: 50 });
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const authenticated = authData?.authenticated ?? isAuthenticated;
@@ -49,12 +54,13 @@ export default function AdminPanel({ categories }: AdminPanelProps) {
   };
 
   // Active sub-sections inside Admin dashboard
-  const [activeTab, setActiveTab] = useState<'reservations' | 'menu' | 'tables' | 'settings'>('reservations');
+  const [activeTab, setActiveTab] = useState<'reservations' | 'notifications' | 'menu' | 'categories' | 'tables' | 'settings'>('reservations');
 
   // Computations for dashboard overview cards
   const reservationsData = reservationsQuery.data ?? [];
   const tablesData = tablesQuery.data ?? [];
   const menuProductsData = menuQuery.data ?? [];
+  const notificationsData = notificationsQuery.data ?? [];
   const totalRevenueSimulated = reservationsData
     .filter((r) => ['simulated_paid', 'success'].includes(r.paymentStatus) && r.status !== 'cancelled')
     .reduce((sum, r) => {
@@ -68,10 +74,14 @@ export default function AdminPanel({ categories }: AdminPanelProps) {
     }, 0);
 
   const pendingConfirmations = reservationsData.filter((r) => r.status === 'pending').length;
+  const inServiceCount = countInService(reservationsData);
+  const unreadNotifications = notificationsData.filter((n) => n.dismissedAt === null).length;
 
   const tabLabels = {
     reservations: isEs ? 'Tablero Kanban' : 'Kanban Board',
+    notifications: isEs ? 'Notificaciones' : 'Notifications',
     menu: isEs ? 'Gestor de Menú' : 'Menu Manager',
+    categories: isEs ? 'Categorías' : 'Categories',
     tables: isEs ? 'Mesas y Zonas' : 'Tables & Areas',
     settings: isEs ? 'Configuración' : 'Settings'
   };
@@ -123,7 +133,7 @@ export default function AdminPanel({ categories }: AdminPanelProps) {
       </div>
 
       {/* KPI Stats widgets block */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="admin-kpis-grid">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" id="admin-kpis-grid">
         <div className="bg-white border border-espresso/15 p-4 rounded-xl flex items-center gap-3 shadow-sm text-left">
           <div className="p-3 bg-ochre/10 text-ochre rounded-lg border border-ochre/20">
             <Calendar className="w-5 h-5" />
@@ -145,6 +155,21 @@ export default function AdminPanel({ categories }: AdminPanelProps) {
               {isEs ? 'Pendientes de Pago' : 'Pending Confirmation'}
             </span>
             <p className="text-2xl font-black font-serif text-amber-800 mt-0.5">{pendingConfirmations}</p>
+          </div>
+        </div>
+
+        <div
+          className="bg-white border border-espresso/15 p-4 rounded-xl flex items-center gap-3 shadow-sm text-left"
+          id="kpi-in-service"
+        >
+          <div className="p-3 bg-blue-500/10 text-blue-800 rounded-lg border border-blue-500/20">
+            <Utensils className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] text-espresso/60 uppercase font-bold tracking-wider">
+              {isEs ? 'En Servicio' : 'Currently In Service'}
+            </span>
+            <p className="text-2xl font-black font-serif text-blue-800 mt-0.5">{inServiceCount}</p>
           </div>
         </div>
 
@@ -180,21 +205,23 @@ export default function AdminPanel({ categories }: AdminPanelProps) {
           if (tabId === 'reservations') count = reservationsData.length;
           if (tabId === 'menu') count = menuProductsData.length;
           if (tabId === 'tables') count = tablesData.length;
+          if (tabId === 'notifications') count = unreadNotifications;
 
           return (
             <button
               key={tabId}
               onClick={() => setActiveTab(tabId)}
-              className={`px-4 py-2 border-b-2 text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors whitespace-nowrap ${
+              className={`px-4 py-2 border-b-2 text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === tabId
                   ? 'border-ochre text-ochre pb-1'
                   : 'border-transparent text-espresso/60 hover:text-espresso hover:border-espresso/20'
               }`}
               id={`admin-tab-${tabId}`}
             >
+              {tabId === 'notifications' && <Bell className="w-3.5 h-3.5" />}
               {tabLabels[tabId]}
               {count !== undefined && (
-                <span className="ml-1.5 text-[9px] bg-espresso/5 text-espresso/70 px-1.5 py-0.5 rounded-full font-bold">
+                <span className="text-[9px] bg-espresso/5 text-espresso/70 px-1.5 py-0.5 rounded-full font-bold">
                   {count}
                 </span>
               )}
@@ -205,7 +232,21 @@ export default function AdminPanel({ categories }: AdminPanelProps) {
 
       {/* RENDER ACTIVE TAB */}
       {activeTab === 'reservations' && <KanbanBoard />}
+      {activeTab === 'notifications' && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs text-espresso/60">
+            <Bell className="w-4 h-4 text-ochre" />
+            <span>
+              {isEs
+                ? 'Registro de eventos del sistema. Haz clic en "Descartar" para marcarlos como leídos.'
+                : 'System event log. Click "Dismiss" to mark them as read.'}
+            </span>
+          </div>
+          <NotificationHistory />
+        </div>
+      )}
       {activeTab === 'menu' && <MenuManager categories={categories} />}
+      {activeTab === 'categories' && <CategoryManager />}
       {activeTab === 'tables' && <TablesManager />}
       {activeTab === 'settings' && <SettingsPanel />}
     </div>

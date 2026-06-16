@@ -1,27 +1,37 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { MenuItem, Category } from '../../types';
 import { useReservation } from '../../context/ReservationContext';
-import { useMenuQuery } from '../../lib/queries';
-import { useUpdateMenuProduct, useCreateMenuProduct, useDeleteMenuProduct } from '../../lib/mutations';
+import { useMenuQuery, useMenuCategoriesQuery } from '../../lib/queries';
+import { useUpdateMenuProduct, useCreateMenuProduct, useDeleteMenuProduct, useUploadImage, useDeleteUploadedImage } from '../../lib/mutations';
 import { t } from '../../utils/translations';
-import { INITIAL_CATEGORIES } from '../../data';
-import { Plus, Edit2, Trash2, Save, X, Clock, Sparkles, Eye, EyeOff } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Clock, Sparkles, Eye, EyeOff, Upload, ImageOff } from 'lucide-react';
 
 interface MenuManagerProps {
   categories?: Category[];
 }
 
-export default function MenuManager({ categories = INITIAL_CATEGORIES }: MenuManagerProps) {
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&q=80&w=600';
+
+export default function MenuManager({ categories }: MenuManagerProps) {
   const { language, addNotification } = useReservation();
   const isEs = language === 'es';
   const menuQuery = useMenuQuery();
+  const menuCategoriesQuery = useMenuCategoriesQuery({ activeOnly: true });
   const updateMenuMutation = useUpdateMenuProduct();
   const createMenuMutation = useCreateMenuProduct();
   const deleteMenuMutation = useDeleteMenuProduct();
+  const uploadImageMutation = useUploadImage();
+  const deleteImageMutation = useDeleteUploadedImage();
   const menuProducts: MenuItem[] = menuQuery.data ?? [];
+  // Prefer live query; fall back to legacy prop if provided.
+  const liveCategories = menuCategoriesQuery.data ?? [];
+  const effectiveCategories: Category[] =
+    categories ?? (liveCategories as unknown as Category[]);
 
   const [editingProduct, setEditingProduct] = useState<MenuItem | null>(null);
   const [isAddingProduct, setIsAddingProduct] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Form States
   const [formNameEs, setFormNameEs] = useState('');
@@ -67,12 +77,65 @@ export default function MenuManager({ categories = INITIAL_CATEGORIES }: MenuMan
       ingredients: { es: ingredientsEsArr, en: ingredientsEnArr },
       price: Number(formPrice),
       category: formCategory,
-      image: formImage || 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&q=80&w=600',
+      image: formImage || FALLBACK_IMAGE,
       preparationTime: Number(formPrepTime),
       isSpecial: formIsSpecial,
       active: formActive,
       ...overrides
     };
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadImageMutation.mutate(file, {
+      onSuccess: (result) => {
+        setFormImage(result.url);
+        addNotification(
+          isEs ? 'Imagen subida' : 'Image uploaded',
+          isEs ? 'La imagen se subió correctamente.' : 'The image was uploaded successfully.',
+          'success'
+        );
+      },
+      onError: (err) => {
+        addNotification(
+          isEs ? 'Error al subir imagen' : 'Image upload failed',
+          err instanceof Error ? err.message : 'Unknown error',
+          'alert'
+        );
+      }
+    });
+    // Reset input so selecting the same file twice still fires onChange.
+    e.target.value = '';
+  };
+
+  const handleRemoveImage = () => {
+    if (!formImage) return;
+    if (formImage.startsWith('/uploads/')) {
+      deleteImageMutation.mutate(formImage, {
+        onSuccess: () => {
+          setFormImage('');
+          addNotification(
+            isEs ? 'Imagen eliminada' : 'Image removed',
+            isEs ? 'La imagen se eliminó del servidor.' : 'The image was removed from the server.',
+            'success'
+          );
+        },
+        onError: (err) => {
+          // Surface the error but also clear the form so the user isn't stuck
+          // with a broken thumbnail.
+          setFormImage('');
+          addNotification(
+            isEs ? 'No se pudo eliminar la imagen' : 'Could not delete the image',
+            err instanceof Error ? err.message : 'Unknown error',
+            'alert'
+          );
+        }
+      });
+    } else {
+      // Legacy absolute URL — just clear the form field.
+      setFormImage('');
+    }
   };
 
   const handleSaveProduct = (e: React.FormEvent) => {
@@ -195,24 +258,88 @@ export default function MenuManager({ categories = INITIAL_CATEGORIES }: MenuMan
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div><label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">Precio (USD)</label>
               <input type="number" step="0.01" min="0.10" required value={formPrice}
                 onChange={(e) => setFormPrice(parseFloat(e.target.value))}
                 className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3" id="edit-prod-price" /></div>
             <div><label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">Tiempo (min)</label>
-              <input type="number" min="1" required value={formPrepTime}
+              <input type="number" min={1} required value={formPrepTime}
                 onChange={(e) => setFormPrepTime(parseInt(e.target.value))}
                 className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3" id="edit-prod-time" /></div>
             <div><label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">Categoría</label>
               <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)}
                 className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3" id="edit-prod-cat">
-                {categories.map((c) => (<option key={c.id} value={c.id}>{c.name[language]}</option>))}
+                {effectiveCategories.map((c) => (<option key={c.id} value={c.id}>{c.name[language]}</option>))}
               </select></div>
-            <div><label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">Imagen URL</label>
-              <input type="text" placeholder="/images/humita.png" value={formImage}
-                onChange={(e) => setFormImage(e.target.value)}
-                className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3" id="edit-prod-image" /></div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">
+              {isEs ? 'Imagen' : 'Image'}
+            </label>
+            <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+              <div className="w-24 h-24 bg-espresso/5 border border-espresso/15 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center"
+                id="edit-prod-image-preview">
+                {formImage ? (
+                  <img src={formImage} alt="" className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                ) : (
+                  <ImageOff className="w-6 h-6 text-espresso/30" />
+                )}
+              </div>
+              <div className="flex-1 space-y-2">
+                <div className="flex gap-2 flex-wrap items-center">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleFileSelected}
+                    className="hidden"
+                    id="edit-prod-image-file"
+                    data-testid="edit-prod-image-file"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadImageMutation.isPending}
+                    className="bg-espresso/5 hover:bg-espresso/10 text-espresso border border-espresso/20 rounded-lg text-xs font-semibold px-3 py-2 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                    id="edit-prod-image-upload-btn"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    {uploadImageMutation.isPending
+                      ? (isEs ? 'Subiendo…' : 'Uploading…')
+                      : (isEs ? 'Subir imagen' : 'Upload image')}
+                  </button>
+                  {formImage && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      disabled={deleteImageMutation.isPending}
+                      className="bg-rose-500/5 hover:bg-rose-500/10 text-rose-700 border border-rose-500/20 rounded-lg text-xs font-semibold px-3 py-2 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                      id="edit-prod-image-remove-btn"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {isEs ? 'Eliminar imagen' : 'Remove image'}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  placeholder={isEs ? 'o pega una URL absoluta' : 'or paste an absolute URL'}
+                  value={formImage}
+                  onChange={(e) => setFormImage(e.target.value)}
+                  className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3 font-mono"
+                  id="edit-prod-image"
+                />
+                <p className="text-[10px] text-espresso/50">
+                  {isEs
+                    ? 'Sube una imagen (JPG, PNG, WebP — máx. 5 MB) o pega una URL absoluta para la migración heredada.'
+                    : 'Upload an image (JPG, PNG, WebP — max 5 MB) or paste an absolute URL for the legacy migration path.'}
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-6 items-center pt-2">
@@ -239,7 +366,7 @@ export default function MenuManager({ categories = INITIAL_CATEGORIES }: MenuMan
       {/* Products List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4" id="admin-product-management-list">
         {menuProducts.map((p) => {
-          const productCategory = categories.find(c => c.id === p.category);
+          const productCategory = effectiveCategories.find(c => c.id === p.category);
           return (
             <div key={p.id}
               className={`bg-white border p-4 rounded-xl flex gap-3 justify-between items-start shadow-sm transition-all hover:border-espresso/30 ${p.active ? 'border-espresso/15' : 'border-espresso/10 opacity-70'}`}
@@ -252,7 +379,7 @@ export default function MenuManager({ categories = INITIAL_CATEGORIES }: MenuMan
                       if (p.fallbackImage) {
                         (e.target as HTMLImageElement).src = p.fallbackImage;
                       } else {
-                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&q=80&w=600';
+                        (e.target as HTMLImageElement).src = FALLBACK_IMAGE;
                       }
                     }} />
                   {!p.active && <div className="absolute inset-0 bg-espresso/50 flex items-center justify-center">

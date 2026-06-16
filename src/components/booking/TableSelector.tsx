@@ -4,8 +4,9 @@
  */
 
 import React from 'react';
-import { ReservationTable, Reservation, TableArea, Language } from '../../types';
+import { ReservationTable, Reservation, TableArea, Language, TableAreaRow } from '../../types';
 import { useReservation } from '../../context/ReservationContext';
+import { useTableAreasQuery } from '../../lib/queries';
 import { t } from '../../utils/translations';
 import {
   Coffee,
@@ -57,6 +58,8 @@ export default function TableSelector({
   onNext
 }: TableSelectorProps) {
   const { language } = useReservation();
+  const tableAreasQuery = useTableAreasQuery({ activeOnly: true });
+  const tableAreas: TableAreaRow[] = tableAreasQuery.data ?? [];
 
   // Determine if a table is reserved on the selected date & time Slot
   const isTableOccupied = (tableId: string) => {
@@ -69,32 +72,24 @@ export default function TableSelector({
     );
   };
 
+  const findAreaRow = (id: TableArea): TableAreaRow | undefined =>
+    tableAreas.find((a) => a.id === id);
+
   const getAreaDesc = (area: TableArea, lang: Language): string => {
-    const descs = {
-      waterfall_deck: {
-        es: 'Brisa refrescante, senderos florales con vista directa a la Cascada de Peguche.',
-        en: 'Refreshing breeze, floral paths with direct view of the Peguche Waterfall.'
-      },
-      fireplace_cozy: {
-        es: 'Calor de hogar con fogón a leña, sillones de cuero y música acústica andina.',
-        en: 'Home warmth with wood stove, leather armchairs, and acoustic Andean music.'
-      },
-      indoor_premium: {
-        es: 'Arquitectura rústica de madera tallada y piedra volcánica del norte de Otavalo.',
-        en: 'Rustic architecture of carved wood and volcanic stone from northern Otavalo.'
-      },
-      terrace_panoramic: {
-        es: 'Vista 360° al Cerro Imbabura y los valles sagrados, ideal para atardeceres mágicos.',
-        en: '360° view of Cerro Imbabura and sacred valleys, ideal for magical sunsets.'
-      }
-    };
-    return descs[area][lang] || descs[area]['es'];
+    const row = findAreaRow(area);
+    if (row?.description) {
+      return row.description[lang] || row.description.es || row.description.en || '';
+    }
+    // Fallback to translation key when the query has not loaded yet.
+    return t(`booking.tableSelector.areas.${area}`, lang);
   };
 
   const areaTables = tables.filter((t) => t.area === selectedArea);
   const selectedTable = tables.find((t) => t.id === selectedTableId);
 
   const getAreaLabel = (areaKey: TableArea) => {
+    const row = findAreaRow(areaKey);
+    if (row) return row.name[language] || row.name.es || row.name.en || areaKey;
     return t(`booking.tableSelector.areas.${areaKey}`, language);
   };
 

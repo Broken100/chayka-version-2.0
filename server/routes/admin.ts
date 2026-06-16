@@ -1,15 +1,32 @@
-import { eq } from 'drizzle-orm';
+import { eq, and, count, desc } from 'drizzle-orm';
+import { unlink } from 'node:fs/promises';
+import { resolve, basename, extname } from 'node:path';
 import { db } from '../db/client.js';
-import { tables, reservations, businessConfig, menuItems, adminSessions } from '../db/schema.js';
+import {
+  tables,
+  reservations,
+  businessConfig,
+  menuItems,
+  adminSessions,
+  menuCategories,
+  tableAreas,
+  notifications
+} from '../db/schema.js';
 import {
   createTableSchema,
   updateTableSchema,
   updateBusinessConfigSchema,
   updateReservationStatusSchema,
   adminLoginSchema,
-  createMenuItemSchema
+  createMenuItemSchema,
+  createMenuCategorySchema,
+  updateMenuCategorySchema,
+  createTableAreaSchema,
+  updateTableAreaSchema,
+  notificationListQuerySchema
 } from '../lib/validation.js';
 import { requireAdmin, SESSION_COOKIE } from '../lib/auth.js';
+import { uploadSingle, UPLOADS_DIR, ALLOWED_MIME_TYPES } from '../lib/uploads.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 
@@ -103,6 +120,135 @@ router.get(
 // ─── Protected routes (require session) ────────────────────────────────────────
 
 router.use(requireAdmin);
+
+// ─── Image uploads (D1) ───────────────────────────────────────────────────────
+
+// Multer errors flow through `next(err)` and reach the centralized handler in
+// `server/app.ts`, which reads `err.status` to return 413/415/400 JSON.
+router.post(
+  '/uploads',
+  uploadSingle('file'),
+  asyncHandler(async (req, res) => {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+    res.status(201).json({ url: `/uploads/${file.filename}` });
+  })
+);
+
+const SAFE_FILENAME = /^[\w.-]+$/;
+
+router.delete(
+  '/uploads/:filename',
+  asyncHandler(async (req, res) => {
+    const raw = req.params.filename;
+    // Strip any path components and the .gitkeep marker so traversal is
+    // impossible even if the URL is hand-crafted.
+    const filename = basename(raw);
+    if (filename !== raw || filename === '.gitkeep' || !SAFE_FILENAME.test(filename)) {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+    const filePath = resolve(UPLOADS_DIR, filename);
+    if (extname(filePath) === '') {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+    try {
+      await unlink(filePath);
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (e.code === 'ENOENT') {
+        res.status(404).json({ error: 'File not found' });
+        return;
+      }
+      throw err;
+    }
+    res.status(204).end();
+  })
+);
+
+// ─── Transfer QR upload/delete ──────────────────────────────────────────────
+
+/**
+ * Helper: extract the filename from a stored `/uploads/<file>` URL. Returns
+ * `null` if the URL is missing or doesn't point at a local upload (e.g. a
+ * legacy absolute URL pasted in by hand). Used to safely remove the previous
+ * file from disk when re-uploading.
+ */
+function filenameFromQrUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (!url.startsWith('/uploads/')) return null;
+  const name = url.slice('/uploads/'.length);
+  if (!SAFE_FILENAME.test(name) || name === '.gitkeep' || extname(name) === '') {
+    return null;
+  }
+  return name;
+}
+
+router.post(
+  '/qr',
+  uploadSingle('file'),
+  asyncHandler(async (req, res) => {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+    const transferQrUrl = `/uploads/${file.filename}`;
+
+    // Replace any previous QR: drop the old file (best effort — ENOENT is
+    // fine, the column update is what we actually care about).
+    const previous = await db
+      .select({ transferQrUrl: businessConfig.transferQrUrl })
+      .from(businessConfig)
+      .where(eq(businessConfig.id, 1))
+      .limit(1);
+    const prevName = filenameFromQrUrl(previous[0]?.transferQrUrl);
+    if (prevName && prevName !== file.filename) {
+      try {
+        await unlink(resolve(UPLOADS_DIR, prevName));
+      } catch (err) {
+        const e = err as NodeJS.ErrnoException;
+        if (e.code !== 'ENOENT') throw err;
+      }
+    }
+
+    await db
+      .update(businessConfig)
+      .set({ transferQrUrl, updatedAt: new Date() } as never)
+      .where(eq(businessConfig.id, 1));
+
+    res.status(200).json({ transfer_qr_url: transferQrUrl });
+  })
+);
+
+router.delete(
+  '/qr',
+  asyncHandler(async (_req, res) => {
+    const previous = await db
+      .select({ transferQrUrl: businessConfig.transferQrUrl })
+      .from(businessConfig)
+      .where(eq(businessConfig.id, 1))
+      .limit(1);
+    const prevName = filenameFromQrUrl(previous[0]?.transferQrUrl);
+    if (prevName) {
+      try {
+        await unlink(resolve(UPLOADS_DIR, prevName));
+      } catch (err) {
+        const e = err as NodeJS.ErrnoException;
+        if (e.code !== 'ENOENT') throw err;
+      }
+    }
+    await db
+      .update(businessConfig)
+      .set({ transferQrUrl: null, updatedAt: new Date() } as never)
+      .where(eq(businessConfig.id, 1));
+    res.status(204).end();
+  })
+);
 
 // Menu items
 router.post(
@@ -361,9 +507,356 @@ router.patch(
       res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
       return;
     }
+    // PR#4: capture the old status BEFORE the update so we can decide whether
+    // to write a notification. We do it in a single select+update flow; the
+    // race window (two admins changing at the same instant) is acceptable for
+    // a notification log.
+    const currentRows = await db
+      .select({ id: reservations.id, status: reservations.status })
+      .from(reservations)
+      .where(eq(reservations.id, req.params.id))
+      .limit(1);
+    if (currentRows.length === 0) {
+      res.status(404).json({ error: 'Reservation not found' });
+      return;
+    }
+    const oldStatus = currentRows[0]!.status;
+    const newStatus = parsed.data.status;
+
     const updated = await db
       .update(reservations)
-      .set({ status: parsed.data.status } as never)
+      .set({ status: newStatus } as never)
+      .where(eq(reservations.id, req.params.id))
+      .returning();
+
+    if (updated.length === 0) {
+      res.status(404).json({ error: 'Reservation not found' });
+      return;
+    }
+
+    // PR#4: only write a notification row when the status actually changed.
+    if (oldStatus !== newStatus) {
+      await db.insert(notifications).values({
+        type: 'reservation_status_changed',
+        titleEs: 'Estado Actualizado',
+        titleEn: 'Status Updated',
+        bodyEs: `Reserva ${req.params.id}: ${oldStatus} → ${newStatus}`,
+        bodyEn: `Reservation ${req.params.id}: ${oldStatus} → ${newStatus}`,
+        sourceReservationId: req.params.id
+      } as never);
+    }
+
+    res.json(updated[0]);
+  })
+);
+
+// Menu categories CRUD
+
+router.post(
+  '/menu-categories',
+  asyncHandler(async (req, res) => {
+    const parsed = createMenuCategorySchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
+      return;
+    }
+    const data = parsed.data;
+    const existing = await db
+      .select({ id: menuCategories.id })
+      .from(menuCategories)
+      .where(eq(menuCategories.id, data.id))
+      .limit(1);
+    if (existing.length > 0) {
+      res.status(409).json({ error: 'Menu category id already exists' });
+      return;
+    }
+    const inserted = await db
+      .insert(menuCategories)
+      .values({
+        id: data.id,
+        nameEs: data.name.es,
+        nameEn: data.name.en,
+        displayOrder: data.displayOrder,
+        active: true
+      } as never)
+      .returning();
+    res.status(201).json(inserted[0]);
+  })
+);
+
+router.put(
+  '/menu-categories/:id',
+  asyncHandler(async (req, res) => {
+    const parsed = updateMenuCategorySchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
+      return;
+    }
+    const id = req.params.id;
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (parsed.data.name) {
+      if (parsed.data.name.es !== undefined) update.nameEs = parsed.data.name.es;
+      if (parsed.data.name.en !== undefined) update.nameEn = parsed.data.name.en;
+    }
+    if (parsed.data.displayOrder !== undefined) update.displayOrder = parsed.data.displayOrder;
+    if (parsed.data.active !== undefined) update.active = parsed.data.active;
+    const updated = await db
+      .update(menuCategories)
+      .set(update as never)
+      .where(eq(menuCategories.id, id))
+      .returning();
+    if (updated.length === 0) {
+      res.status(404).json({ error: 'Menu category not found' });
+      return;
+    }
+    res.json(updated[0]);
+  })
+);
+
+router.delete(
+  '/menu-categories/:id',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id;
+    // Count how many menu items reference this category.
+    const refs = await db
+      .select({ c: count() })
+      .from(menuItems)
+      .where(eq(menuItems.category, id));
+    const usedCount = Number(refs[0]?.c ?? 0);
+    if (usedCount > 0) {
+      // Soft-delete: mark inactive and return 409 so the UI can surface the count.
+      await db
+        .update(menuCategories)
+        .set({ active: false, updatedAt: new Date() } as never)
+        .where(eq(menuCategories.id, id));
+      res.status(409).json({ error: `${usedCount} items use this category` });
+      return;
+    }
+    const deleted = await db
+      .delete(menuCategories)
+      .where(eq(menuCategories.id, id))
+      .returning({ id: menuCategories.id });
+    if (deleted.length === 0) {
+      res.status(404).json({ error: 'Menu category not found' });
+      return;
+    }
+    res.status(204).end();
+  })
+);
+
+// Table areas CRUD
+
+router.post(
+  '/table-areas',
+  asyncHandler(async (req, res) => {
+    const parsed = createTableAreaSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
+      return;
+    }
+    const data = parsed.data;
+    const existing = await db
+      .select({ id: tableAreas.id })
+      .from(tableAreas)
+      .where(eq(tableAreas.id, data.id))
+      .limit(1);
+    if (existing.length > 0) {
+      res.status(409).json({ error: 'Table area id already exists' });
+      return;
+    }
+    const inserted = await db
+      .insert(tableAreas)
+      .values({
+        id: data.id,
+        nameEs: data.name.es,
+        nameEn: data.name.en,
+        descriptionEs: data.description?.es ?? null,
+        descriptionEn: data.description?.en ?? null,
+        displayOrder: data.displayOrder,
+        active: true
+      } as never)
+      .returning();
+    res.status(201).json(inserted[0]);
+  })
+);
+
+router.put(
+  '/table-areas/:id',
+  asyncHandler(async (req, res) => {
+    const parsed = updateTableAreaSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
+      return;
+    }
+    const id = req.params.id;
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (parsed.data.name) {
+      if (parsed.data.name.es !== undefined) update.nameEs = parsed.data.name.es;
+      if (parsed.data.name.en !== undefined) update.nameEn = parsed.data.name.en;
+    }
+    if (parsed.data.description) {
+      if (parsed.data.description.es !== undefined) update.descriptionEs = parsed.data.description.es;
+      if (parsed.data.description.en !== undefined) update.descriptionEn = parsed.data.description.en;
+    }
+    if (parsed.data.displayOrder !== undefined) update.displayOrder = parsed.data.displayOrder;
+    if (parsed.data.active !== undefined) update.active = parsed.data.active;
+    const updated = await db
+      .update(tableAreas)
+      .set(update as never)
+      .where(eq(tableAreas.id, id))
+      .returning();
+    if (updated.length === 0) {
+      res.status(404).json({ error: 'Table area not found' });
+      return;
+    }
+    res.json(updated[0]);
+  })
+);
+
+router.delete(
+  '/table-areas/:id',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id;
+    // Count how many tables reference this area.
+    const refs = await db
+      .select({ c: count() })
+      .from(tables)
+      .where(eq(tables.area, id as never));
+    const usedCount = Number(refs[0]?.c ?? 0);
+    if (usedCount > 0) {
+      await db
+        .update(tableAreas)
+        .set({ active: false, updatedAt: new Date() } as never)
+        .where(eq(tableAreas.id, id));
+      res.status(409).json({ error: `${usedCount} tables use this area` });
+      return;
+    }
+    const deleted = await db
+      .delete(tableAreas)
+      .where(eq(tableAreas.id, id))
+      .returning({ id: tableAreas.id });
+    if (deleted.length === 0) {
+      res.status(404).json({ error: 'Table area not found' });
+      return;
+    }
+    res.status(204).end();
+  })
+);
+
+// ─── Notifications (PR#4) ────────────────────────────────────────────────────
+
+// GET /api/admin/notifications?limit=50
+// Default 50, max 200. Ordered by created_at DESC.
+router.get(
+  '/notifications',
+  asyncHandler(async (req, res) => {
+    const parsed = notificationListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid query' });
+      return;
+    }
+    const rows = await db
+      .select()
+      .from(notifications)
+      .orderBy(desc(notifications.createdAt))
+      .limit(parsed.data.limit);
+    res.json(rows);
+  })
+);
+
+// POST /api/admin/notifications/:id/dismiss
+// Sets dismissed_at = now(). 204 on success, 404 if id is unknown.
+router.post(
+  '/notifications/:id/dismiss',
+  asyncHandler(async (req, res) => {
+    // The bigserial `id` is numeric. Reject obviously bad input early to
+    // avoid Postgres throwing on the cast.
+    const numericId = Number(req.params.id);
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(404).json({ error: 'Notification not found' });
+      return;
+    }
+    const updated = await db
+      .update(notifications)
+      .set({ dismissedAt: new Date() } as never)
+      .where(eq(notifications.id, numericId))
+      .returning({ id: notifications.id });
+    if (updated.length === 0) {
+      res.status(404).json({ error: 'Notification not found' });
+      return;
+    }
+    res.status(204).end();
+  })
+);
+
+// ─── Service tracking (PR#4) ─────────────────────────────────────────────────
+
+/**
+ * Single source of truth for the service state machine:
+ *   not_checked_in → checked_in → in_service → completed
+ * No backward transitions — anything else returns 409.
+ */
+type ServiceTransition = {
+  from: 'not_checked_in' | 'checked_in' | 'in_service' | 'completed';
+  to: 'not_checked_in' | 'checked_in' | 'in_service' | 'completed';
+  stampColumn: 'checkedInAt' | 'serviceStartedAt' | 'serviceCompletedAt';
+};
+
+const SERVICE_TRANSITIONS: Record<string, ServiceTransition> = {
+  '/reservations/:id/checkin': {
+    from: 'not_checked_in',
+    to: 'checked_in',
+    stampColumn: 'checkedInAt'
+  },
+  '/reservations/:id/start-service': {
+    from: 'checked_in',
+    to: 'in_service',
+    stampColumn: 'serviceStartedAt'
+  },
+  '/reservations/:id/complete-service': {
+    from: 'in_service',
+    to: 'completed',
+    stampColumn: 'serviceCompletedAt'
+  }
+};
+
+function applyServiceTransition(
+  req: Request,
+  res: Response,
+  transition: ServiceTransition
+): Promise<void> {
+  return (async () => {
+    const currentRows = await db
+      .select({
+        id: reservations.id,
+        serviceStatus: reservations.serviceStatus
+      })
+      .from(reservations)
+      .where(eq(reservations.id, req.params.id))
+      .limit(1);
+    if (currentRows.length === 0) {
+      res.status(404).json({ error: 'Reservation not found' });
+      return;
+    }
+    const current = currentRows[0]!.serviceStatus;
+    if (current !== transition.from) {
+      res.status(409).json({
+        error: `Invalid service transition: ${current} → ${transition.to}`
+      });
+      return;
+    }
+    const update: Record<string, unknown> = {
+      serviceStatus: transition.to,
+      [transition.stampColumn]: new Date()
+    };
+    const updated = await db
+      .update(reservations)
+      .set(update as never)
       .where(eq(reservations.id, req.params.id))
       .returning();
     if (updated.length === 0) {
@@ -371,7 +864,26 @@ router.patch(
       return;
     }
     res.json(updated[0]);
-  })
+  })();
+}
+
+router.post(
+  '/reservations/:id/checkin',
+  asyncHandler((req, res) => applyServiceTransition(req, res, SERVICE_TRANSITIONS['/reservations/:id/checkin']!))
+);
+
+router.post(
+  '/reservations/:id/start-service',
+  asyncHandler((req, res) =>
+    applyServiceTransition(req, res, SERVICE_TRANSITIONS['/reservations/:id/start-service']!)
+  )
+);
+
+router.post(
+  '/reservations/:id/complete-service',
+  asyncHandler((req, res) =>
+    applyServiceTransition(req, res, SERVICE_TRANSITIONS['/reservations/:id/complete-service']!)
+  )
 );
 
 export default router;

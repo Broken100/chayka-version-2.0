@@ -1,0 +1,36 @@
+schema: spec-driven
+
+context: |
+  Tech stack: React 19 + Vite + TanStack Query v5 + Express 4 + Drizzle + Neon Postgres
+  Architecture: Hexagonal-ish (server provides /api/* JSON; client consumes via TanStack Query)
+  Testing: Vitest 3 projects (client jsdom, server node, server:integration node with TEST_DATABASE_URL skip)
+  Style: TypeScript strict, bilingual ES copy ('Cargando…' / 'Reintentar'), zod for input validation
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes (cookie renames, schema changes)
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - When amending an existing spec, prefer MODIFIED over ADDED to preserve lineage
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale and locked-vs-open status
+    - 400-line PR review budget; split into stacked PRs when larger
+  tasks:
+    - Group by PR, use hierarchical numbering (1.1, 1.2, …)
+    - Mark test-only tasks separately from implementation tasks
+    - Keep tasks completable in one session
+  apply:
+    - Follow existing code patterns (mutations invalidate query keys on success)
+    - Drop no-op setters and local fallbacks when migrating to API queries
+    tdd: false
+    test_command: "npm test -- --run"
+  verify:
+    test_command: "npm test -- --run"
+    build_command: "npm run build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
+    - Move completed change to openspec/changes/archive/YYYY-MM-DD-{name}/
+    - Update source of truth at openspec/specs/{domain}/spec.md

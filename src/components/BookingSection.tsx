@@ -171,6 +171,8 @@ export default function BookingSection({
       paymentStatus: reference ? 'simulated_paid' : 'unpaid',
       paymentReference: reference,
       notes,
+      // PR#4: a brand-new reservation starts in `not_checked_in`.
+      serviceStatus: 'not_checked_in',
       timestamp: new Date().toISOString(),
       selectedOrderItems: Object.entries(preorders)
         .filter(([_, qty]) => (qty as number) > 0)
@@ -188,87 +190,6 @@ export default function BookingSection({
 
   const getAreaLabel = (area: TableArea) => {
     return t(`booking.tableSelector.areas.${area}`, language);
-  };
-
-  const getWhatsAppLink = () => {
-    if (!completedBooking) return '#';
-    const tableName = selectedTable
-      ? (selectedTable.name[language] || selectedTable.name.es)
-      : completedBooking.tableId;
-    const areaName = getAreaLabel(completedBooking.area) || completedBooking.area;
-
-    const ref = completedBooking.paymentReference || '';
-    let payMethod = '';
-    if (language === 'es') {
-      if (ref.startsWith('TRF-')) payMethod = `💸 Transferencia (Ref: ${ref.replace('TRF-', '')})`;
-      else if (ref === 'EFECTIVO-LOCAL') payMethod = `💵 Efectivo (A abonar en local)`;
-      else if (ref.startsWith('PAY-')) payMethod = `💳 Tarjeta de Crédito/Débito`;
-      else payMethod = `☕ Pago en local`;
-    } else {
-      if (ref.startsWith('TRF-')) payMethod = `💸 Bank Transfer (Ref: ${ref.replace('TRF-', '')})`;
-      else if (ref === 'EFECTIVO-LOCAL') payMethod = `💵 Cash (Pay at store)`;
-      else if (ref.startsWith('PAY-')) payMethod = `💳 Credit/Debit Card`;
-      else payMethod = `☕ Pay at shop`;
-    }
-
-    let msg = '';
-    if (language === 'es') {
-      msg = `*📍 NUEVA RESERVA - CHAYKA COFFEE*\n`;
-      msg += `------------------------------------\n`;
-      msg += `*Cliente:* ${completedBooking.customerName}\n`;
-      msg += `*Fecha:* ${completedBooking.date}\n`;
-      msg += `*Hora:* ${completedBooking.timeSlot}\n`;
-      msg += `*Lugar:* ${areaName}\n`;
-      msg += `*Mesa:* ${tableName}\n`;
-      msg += `*Personas:* ${completedBooking.guestsCount} pers.\n`;
-      msg += `*Estado / Método:* ${payMethod}\n`;
-
-      if (preorderedItemsList.length > 0) {
-        msg += `\n*🛒 PRE-ORDEN DIGITAL:*\n`;
-        preorderedItemsList.forEach((item) => {
-          const nameResolved = item.product?.name[language] || item.product?.name.es;
-          msg += `- ${item.quantity}x ${nameResolved} ($${(item.product?.price || 0).toFixed(2)} c/u)\n`;
-        });
-        msg += `*Total Pre-Orden:* $${preordersTotal.toFixed(2)} USD\n`;
-      }
-
-      if (completedBooking.notes) {
-        msg += `\n*Notas Especiales:* _${completedBooking.notes}_\n`;
-      }
-
-      msg += `------------------------------------\n`;
-      msg += `¡Hola Chayka Coffee! He completado mi reserva y me gustaría confirmar mi llegada. Nos vemos pronto en Otavalo.`;
-    } else {
-      msg = `*📍 NEW RESERVATION - CHAYKA COFFEE*\n`;
-      msg += `------------------------------------\n`;
-      msg += `*Customer:* ${completedBooking.customerName}\n`;
-      msg += `*Date:* ${completedBooking.date}\n`;
-      msg += `*Time:* ${completedBooking.timeSlot}\n`;
-      msg += `*Area:* ${areaName}\n`;
-      msg += `*Table:* ${tableName}\n`;
-      msg += `*Guests:* ${completedBooking.guestsCount} people\n`;
-      msg += `*Status / Method:* ${payMethod}\n`;
-
-      if (preorderedItemsList.length > 0) {
-        msg += `\n*🛒 DIGITAL PRE-ORDER:*\n`;
-        preorderedItemsList.forEach((item) => {
-          const nameResolved = item.product?.name[language] || item.product?.name.en;
-          msg += `- ${item.quantity}x ${nameResolved} ($${(item.product?.price || 0).toFixed(2)} each)\n`;
-        });
-        msg += `*Pre-Order Total:* $${preordersTotal.toFixed(2)} USD\n`;
-      }
-
-      if (completedBooking.notes) {
-        msg += `\n*Special Notes:* _${completedBooking.notes}_\n`;
-      }
-
-      msg += `------------------------------------\n`;
-      msg += `Hello Chayka Coffee! I have completed my booking and would like to confirm my arrival. See you soon in Otavalo.`;
-    }
-
-    const encodedText = encodeURIComponent(msg);
-    const formattedPhone = businessConfig.whatsappNumber.replace(/[^0-9+]/g, '');
-    return `https://wa.me/${formattedPhone}?text=${encodedText}`;
   };
 
   const copyReceiptToClipboard = () => {
@@ -669,7 +590,6 @@ export default function BookingSection({
               totalToPay={totalToPay}
               preorderedItemsList={preorderedItemsList}
               preordersTotal={preordersTotal}
-              getWhatsAppLink={getWhatsAppLink}
               copyReceiptToClipboard={copyReceiptToClipboard}
               onReset={handleReset}
             />

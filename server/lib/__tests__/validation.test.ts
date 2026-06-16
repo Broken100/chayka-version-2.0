@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { simulatePaymentSchema, createMenuItemSchema } from '../validation.js';
+import {
+  simulatePaymentSchema,
+  createMenuItemSchema,
+  updateBusinessConfigSchema,
+  createReservationSchema
+} from '../validation.js';
 
 describe('simulatePaymentSchema', () => {
   it('accepts a valid card payment', () => {
@@ -105,5 +110,117 @@ describe('createMenuItemSchema', () => {
       category: 'c'
     });
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe('E.164 phone validation (D6 / D10)', () => {
+  describe('whatsappNumber (updateBusinessConfigSchema)', () => {
+    it('accepts a valid E.164 number', () => {
+      const parsed = updateBusinessConfigSchema.safeParse({
+        whatsappNumber: '+593987163354'
+      });
+      expect(parsed.success).toBe(true);
+    });
+
+    it('accepts the minimum-length E.164 number (8 digits)', () => {
+      const parsed = updateBusinessConfigSchema.safeParse({
+        whatsappNumber: '+12345678'
+      });
+      expect(parsed.success).toBe(true);
+    });
+
+    it('accepts the maximum-length E.164 number (15 digits)', () => {
+      const parsed = updateBusinessConfigSchema.safeParse({
+        whatsappNumber: '+123456789012345'
+      });
+      expect(parsed.success).toBe(true);
+    });
+
+    it('rejects a number without the leading +', () => {
+      const parsed = updateBusinessConfigSchema.safeParse({
+        whatsappNumber: '0987163354'
+      });
+      expect(parsed.success).toBe(false);
+    });
+
+    it('rejects a number with spaces, dashes, or parentheses', () => {
+      const parsed = updateBusinessConfigSchema.safeParse({
+        whatsappNumber: '+593 98-716-3354'
+      });
+      expect(parsed.success).toBe(false);
+    });
+
+    it('rejects a number that is too short (<8 digits)', () => {
+      const parsed = updateBusinessConfigSchema.safeParse({
+        whatsappNumber: '+1234567'
+      });
+      expect(parsed.success).toBe(false);
+    });
+
+    it('rejects a number that is too long (>15 digits)', () => {
+      const parsed = updateBusinessConfigSchema.safeParse({
+        whatsappNumber: '+1234567890123456'
+      });
+      expect(parsed.success).toBe(false);
+    });
+
+    it('rejects a number containing letters', () => {
+      const parsed = updateBusinessConfigSchema.safeParse({
+        whatsappNumber: '+59398ABC1234'
+      });
+      expect(parsed.success).toBe(false);
+    });
+  });
+
+  describe('customerPhone (createReservationSchema)', () => {
+    const baseReservation = {
+      customerName: 'Alice',
+      customerEmail: 'alice@example.com',
+      date: '2026-07-15',
+      timeSlot: '10:00',
+      tableId: 't1',
+      area: 'waterfall_deck' as const,
+      guestsCount: 2
+    };
+
+    it('accepts a valid E.164 phone', () => {
+      const parsed = createReservationSchema.safeParse({
+        ...baseReservation,
+        customerPhone: '+593987163354'
+      });
+      expect(parsed.success).toBe(true);
+    });
+
+    it('rejects a phone without the leading +', () => {
+      const parsed = createReservationSchema.safeParse({
+        ...baseReservation,
+        customerPhone: '987163354'
+      });
+      expect(parsed.success).toBe(false);
+    });
+
+    it('rejects a phone with spaces, dashes, or parentheses', () => {
+      const parsed = createReservationSchema.safeParse({
+        ...baseReservation,
+        customerPhone: '+593 (98) 716-3354'
+      });
+      expect(parsed.success).toBe(false);
+    });
+
+    it('rejects a phone that is too short', () => {
+      const parsed = createReservationSchema.safeParse({
+        ...baseReservation,
+        customerPhone: '+1234567'
+      });
+      expect(parsed.success).toBe(false);
+    });
+
+    it('rejects a phone that is too long', () => {
+      const parsed = createReservationSchema.safeParse({
+        ...baseReservation,
+        customerPhone: '+1234567890123456'
+      });
+      expect(parsed.success).toBe(false);
+    });
   });
 });

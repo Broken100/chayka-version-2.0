@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// E.164: leading + followed by 8–15 digits. Used for both business WhatsApp
+// (D6) and customer phone (D10) so the wa.me link builder in PR#5 can never
+// produce a malformed URL.
+const E164_REGEX = /^\+\d{8,15}$/;
+export const e164PhoneSchema = z
+  .string()
+  .regex(E164_REGEX, 'must be E.164 format (e.g. +593987163354)');
+
 export const tableAreaSchema = z.enum([
   'waterfall_deck',
   'fireplace_cozy',
@@ -20,7 +28,12 @@ export const paymentStatusSchema = z.enum([
 export const createReservationSchema = z.object({
   customerName: z.string().min(1, 'customerName is required'),
   customerEmail: z.string().email('customerEmail must be a valid email'),
-  customerPhone: z.string().min(1, 'customerPhone is required'),
+  customerPhone: z
+    .string()
+    .regex(
+      E164_REGEX,
+      'customerPhone must be E.164 format (e.g. +593987163354)'
+    ),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
   timeSlot: z.string().min(1, 'timeSlot is required'),
   tableId: z.string().min(1, 'tableId is required'),
@@ -56,7 +69,13 @@ export const updateBusinessConfigSchema = z.object({
   name: z.string().optional(),
   location: z.string().optional(),
   locationLink: z.string().optional(),
-  whatsappNumber: z.string().optional(),
+  whatsappNumber: z
+    .string()
+    .regex(
+      E164_REGEX,
+      'whatsappNumber must be E.164 format (e.g. +593987163354)'
+    )
+    .optional(),
   minPeopleReservation: z.number().int().positive().optional(),
   maxPeopleReservation: z.number().int().positive().optional(),
   schedules: z
@@ -105,4 +124,66 @@ export const createMenuItemSchema = z.object({
     .optional(),
   isSpecial: z.boolean().optional(),
   preparationTime: z.number().int().nonnegative().optional()
+});
+
+export const createMenuCategorySchema = z.object({
+  id: z.string().min(1, 'id is required'),
+  name: z.object({
+    es: z.string().min(1, 'name.es is required'),
+    en: z.string().min(1, 'name.en is required')
+  }),
+  displayOrder: z.number().int().nonnegative('displayOrder must be non-negative')
+});
+
+export const updateMenuCategorySchema = z.object({
+  name: z
+    .object({
+      es: z.string().min(1).optional(),
+      en: z.string().min(1).optional()
+    })
+    .optional(),
+  displayOrder: z.number().int().nonnegative().optional(),
+  active: z.boolean().optional()
+});
+
+export const createTableAreaSchema = z.object({
+  id: z.string().min(1, 'id is required'),
+  name: z.object({
+    es: z.string().min(1, 'name.es is required'),
+    en: z.string().min(1, 'name.en is required')
+  }),
+  description: z
+    .object({
+      es: z.string().optional(),
+      en: z.string().optional()
+    })
+    .optional(),
+  displayOrder: z.number().int().nonnegative('displayOrder must be non-negative')
+});
+
+export const updateTableAreaSchema = z.object({
+  name: z
+    .object({
+      es: z.string().min(1).optional(),
+      en: z.string().min(1).optional()
+    })
+    .optional(),
+  description: z
+    .object({
+      es: z.string().optional(),
+      en: z.string().optional()
+    })
+    .optional(),
+  displayOrder: z.number().int().nonnegative().optional(),
+  active: z.boolean().optional()
+});
+
+// PR#4: notifications list pagination. Default 50, hard cap 200.
+export const notificationListQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .positive('limit must be positive')
+    .max(200, 'limit must be at most 200')
+    .default(50)
 });

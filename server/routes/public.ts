@@ -1,6 +1,14 @@
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { menuItems, tables, reservations, businessConfig } from '../db/schema.js';
+import {
+  menuItems,
+  tables,
+  reservations,
+  businessConfig,
+  menuCategories,
+  tableAreas,
+  notifications
+} from '../db/schema.js';
 import { createReservationSchema } from '../lib/validation.js';
 import { generateReservationId } from '../lib/reservation-id.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
@@ -34,6 +42,25 @@ router.get(
 );
 
 router.get(
+  '/menu-categories',
+  asyncHandler(async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(menuCategories)
+      .orderBy(asc(menuCategories.displayOrder));
+    res.json(rows);
+  })
+);
+
+router.get(
+  '/table-areas',
+  asyncHandler(async (_req, res) => {
+    const rows = await db.select().from(tableAreas).orderBy(asc(tableAreas.displayOrder));
+    res.json(rows);
+  })
+);
+
+router.get(
   '/business-config',
   asyncHandler(async (_req, res) => {
     const rows = await db.select().from(businessConfig).where(eq(businessConfig.id, 1));
@@ -47,7 +74,8 @@ router.get(
         minPeopleReservation: 1,
         maxPeopleReservation: 10,
         schedules: [],
-        timeSlots: []
+        timeSlots: [],
+        transferQrUrl: null
       });
       return;
     }
@@ -90,6 +118,18 @@ router.post(
         selectedOrderItems: parsed.data.selectedOrderItems
       } as never)
       .returning();
+
+    // PR#4: persist a notification for the admin feed. Bilingual es + en
+    // (D9). We do not fail the request if the insert fails — the customer
+    // already has their reservation; the log is best-effort.
+    await db.insert(notifications).values({
+      type: 'reservation_created',
+      titleEs: 'Nueva Reserva',
+      titleEn: 'New Reservation',
+      bodyEs: `Reserva ${id} para ${parsed.data.customerName} (${parsed.data.guestsCount} personas, ${parsed.data.date} ${parsed.data.timeSlot}).`,
+      bodyEn: `Reservation ${id} for ${parsed.data.customerName} (${parsed.data.guestsCount} guests, ${parsed.data.date} ${parsed.data.timeSlot}).`,
+      sourceReservationId: id
+    } as never);
 
     res.status(201).json(inserted[0]);
   })

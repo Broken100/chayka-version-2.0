@@ -54,12 +54,24 @@ export async function getApp(): Promise<Express> {
 export async function truncateTables(): Promise<void> {
   if (!hasTestDatabase) return;
   const { db } = await import('../db/client.js');
-  const { adminSessions, menuItems, tables, reservations, businessConfig } =
-    await import('../db/schema.js');
-  // Order matters: tables are referenced by reservations.
+  const {
+    adminSessions,
+    menuItems,
+    tables,
+    reservations,
+    businessConfig,
+    menuCategories,
+    tableAreas,
+    notifications
+  } = await import('../db/schema.js');
+  // Order matters: tables are referenced by reservations; notifications
+  // are independent but listed for completeness.
+  await db.delete(notifications);
   await db.delete(reservations);
   await db.delete(tables);
   await db.delete(menuItems);
   await db.delete(businessConfig);
+  await db.delete(menuCategories);
+  await db.delete(tableAreas);
   await db.delete(adminSessions);
 }

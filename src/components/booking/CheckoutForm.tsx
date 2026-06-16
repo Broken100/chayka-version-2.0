@@ -50,12 +50,11 @@ export default function CheckoutForm({
       newErrors.email = t('booking.form.validation.emailInvalid', language);
     }
 
-    // Phone validation
-    const cleanPhone = customerPhone.replace(/[\s\-()]/g, '');
-    const phoneRegex = /^\+?[0-9]{7,15}$/;
+    // Phone validation — E.164 (D10): leading + and 8–15 digits.
+    const phoneRegex = /^\+\d{8,15}$/;
     if (!customerPhone.trim()) {
       newErrors.phone = t('booking.form.validation.phoneRequired', language);
-    } else if (!phoneRegex.test(cleanPhone)) {
+    } else if (!phoneRegex.test(customerPhone.trim())) {
       newErrors.phone = t('booking.form.validation.phoneInvalid', language);
     }
 
@@ -114,6 +113,7 @@ export default function CheckoutForm({
           <input
             type="tel"
             required
+            pattern="^\+\d{8,15}$"
             placeholder={t('booking.form.phonePlaceholder', language)}
             value={customerPhone}
             onChange={(e) => {

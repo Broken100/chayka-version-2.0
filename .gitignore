@@ -7,3 +7,5 @@ coverage/
 .env*
 !.env.example
 .atl/
+server/uploads/*
+!server/uploads/.gitkeep
