@@ -75,7 +75,8 @@ d('Service tracking — happy paths (integration)', () => {
   it('full happy path: not_checked_in → checked_in → in_service → completed', async () => {
     const app = await getApp();
     const { db } = await import('../db/client.js');
-    const { reservations, eq } = await import('../db/schema.js');
+    const { reservations } = await import('../db/schema.js');
+    const { eq } = await import('drizzle-orm');
     const id = await seedReservation(app);
     const cookie = await login(app);
 
