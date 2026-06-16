@@ -250,6 +250,13 @@ export function rowToReservation(row: ReservationRow): Reservation {
     row.serviceStatus === 'completed'
       ? row.serviceStatus
       : 'not_checked_in';
+  // The server's `selectedOrderItems` row uses `productId`; the app's
+  // `Reservation` type uses `menuItemId` (legacy naming). Map it.
+  const selectedOrderItems = row.selectedOrderItems?.map((item) => ({
+    menuItemId: (item as { productId?: string; menuItemId?: string }).menuItemId ?? item.productId ?? '',
+    quantity: item.quantity,
+    price: item.price
+  }));
   return {
     id: row.id,
     customerName: row.customerName,
@@ -265,7 +272,7 @@ export function rowToReservation(row: ReservationRow): Reservation {
     paymentReference: row.paymentReference ?? undefined,
     notes: row.notes ?? undefined,
     timestamp: row.timestamp,
-    selectedOrderItems: row.selectedOrderItems ?? undefined,
+    selectedOrderItems,
     serviceStatus,
     checkedInAt: row.checkedInAt,
     serviceStartedAt: row.serviceStartedAt,
