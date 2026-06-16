@@ -106,3 +106,55 @@ export const createMenuItemSchema = z.object({
   isSpecial: z.boolean().optional(),
   preparationTime: z.number().int().nonnegative().optional()
 });
+
+export const createMenuCategorySchema = z.object({
+  id: z.string().min(1, 'id is required'),
+  name: z.object({
+    es: z.string().min(1, 'name.es is required'),
+    en: z.string().min(1, 'name.en is required')
+  }),
+  displayOrder: z.number().int().nonnegative('displayOrder must be non-negative')
+});
+
+export const updateMenuCategorySchema = z.object({
+  name: z
+    .object({
+      es: z.string().min(1).optional(),
+      en: z.string().min(1).optional()
+    })
+    .optional(),
+  displayOrder: z.number().int().nonnegative().optional(),
+  active: z.boolean().optional()
+});
+
+export const createTableAreaSchema = z.object({
+  id: z.string().min(1, 'id is required'),
+  name: z.object({
+    es: z.string().min(1, 'name.es is required'),
+    en: z.string().min(1, 'name.en is required')
+  }),
+  description: z
+    .object({
+      es: z.string().optional(),
+      en: z.string().optional()
+    })
+    .optional(),
+  displayOrder: z.number().int().nonnegative('displayOrder must be non-negative')
+});
+
+export const updateTableAreaSchema = z.object({
+  name: z
+    .object({
+      es: z.string().min(1).optional(),
+      en: z.string().min(1).optional()
+    })
+    .optional(),
+  description: z
+    .object({
+      es: z.string().optional(),
+      en: z.string().optional()
+    })
+    .optional(),
+  displayOrder: z.number().int().nonnegative().optional(),
+  active: z.boolean().optional()
+});
