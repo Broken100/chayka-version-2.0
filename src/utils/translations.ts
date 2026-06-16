@@ -298,6 +298,10 @@ export const translations = {
       paymentFailed: 'El pago para la reserva {id} ha fallado.',
       welcome: '¡Hola! Te damos la bienvenida a la experiencia Chayka Coffee. Explora el menú andino y asegura tu mesa junto a la cascada hoy.',
       trafficSim: 'Un cliente acaba de reservar el "{table}" para {time}. ¡Pocos espacios libres hoy!'
+    },
+    whatsapp: {
+      send: 'Enviar a WhatsApp',
+      resend: 'Reenviar WhatsApp'
     }
   },
   en: {
@@ -597,6 +601,10 @@ export const translations = {
       paymentFailed: 'Payment for reservation {id} has failed.',
       welcome: 'Hello! Welcome to the Chayka Coffee experience. Explore the Andean menu and secure your table by the waterfall today.',
       trafficSim: 'A customer has just booked "{table}" for {time}. Few slots left today!'
+    },
+    whatsapp: {
+      send: 'Send via WhatsApp',
+      resend: 'Resend WhatsApp'
     }
   }
 };
