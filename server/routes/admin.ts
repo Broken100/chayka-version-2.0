@@ -1,4 +1,6 @@
 import { eq } from 'drizzle-orm';
+import { unlink } from 'node:fs/promises';
+import { resolve, basename, extname } from 'node:path';
 import { db } from '../db/client.js';
 import { tables, reservations, businessConfig, menuItems, adminSessions } from '../db/schema.js';
 import {
@@ -10,6 +12,7 @@ import {
   createMenuItemSchema
 } from '../lib/validation.js';
 import { requireAdmin, SESSION_COOKIE } from '../lib/auth.js';
+import { uploadSingle, UPLOADS_DIR, ALLOWED_MIME_TYPES } from '../lib/uploads.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 
@@ -103,6 +106,55 @@ router.get(
 // ─── Protected routes (require session) ────────────────────────────────────────
 
 router.use(requireAdmin);
+
+// ─── Image uploads (D1) ───────────────────────────────────────────────────────
+
+// Multer errors flow through `next(err)` and reach the centralized handler in
+// `server/app.ts`, which reads `err.status` to return 413/415/400 JSON.
+router.post(
+  '/uploads',
+  uploadSingle('file'),
+  asyncHandler(async (req, res) => {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+    res.status(201).json({ url: `/uploads/${file.filename}` });
+  })
+);
+
+const SAFE_FILENAME = /^[\w.-]+$/;
+
+router.delete(
+  '/uploads/:filename',
+  asyncHandler(async (req, res) => {
+    const raw = req.params.filename;
+    // Strip any path components and the .gitkeep marker so traversal is
+    // impossible even if the URL is hand-crafted.
+    const filename = basename(raw);
+    if (filename !== raw || filename === '.gitkeep' || !SAFE_FILENAME.test(filename)) {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+    const filePath = resolve(UPLOADS_DIR, filename);
+    if (extname(filePath) === '') {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+    try {
+      await unlink(filePath);
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (e.code === 'ENOENT') {
+        res.status(404).json({ error: 'File not found' });
+        return;
+      }
+      throw err;
+    }
+    res.status(204).end();
+  })
+);
 
 // Menu items
 router.post(

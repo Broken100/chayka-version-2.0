@@ -40,9 +40,15 @@ export default function SettingsPanel() {
           <Smartphone className="w-4 h-4" /><span>{isEs ? 'Contacto' : 'Contact'}</span>
         </h3>
         <label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">WhatsApp</label>
-        <input type="text" value={m.whatsappNumber}
+        <input type="tel" pattern="^\+\d{8,15}$" value={m.whatsappNumber}
           onChange={(e) => setDraft((d) => ({ ...d, whatsappNumber: e.target.value }))}
-          className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2.5 px-3" id="admin-conf-wa" />
+          placeholder="+593987163354"
+          className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2.5 px-3 font-mono" id="admin-conf-wa" />
+        <p className="text-[10px] text-espresso/50 mt-1">
+          {isEs
+            ? 'Formato E.164: + prefijo país y 8–15 dígitos (ej. +593987163354).'
+            : 'E.164 format: + country code and 8–15 digits (e.g. +593987163354).'}
+        </p>
         <button onClick={() => save('contact')}
           disabled={!draft.whatsappNumber || updateConfigMutation.isPending}
           className="bg-ochre hover:bg-ochre/90 disabled:bg-ochre/60 text-coffee-bg text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all"
