@@ -45,6 +45,22 @@ export interface Category {
   description: BilingualText;
 }
 
+export interface MenuCategory {
+  id: string;
+  name: BilingualText;
+  displayOrder: number;
+  active: boolean;
+  icon?: string; // Local icon-name → Lucide map, kept client-side
+}
+
+export interface TableAreaRow {
+  id: string;
+  name: BilingualText;
+  description?: BilingualText;
+  displayOrder: number;
+  active: boolean;
+}
+
 export type TableArea = 'waterfall_deck' | 'fireplace_cozy' | 'indoor_premium' | 'terrace_panoramic';
 
 export interface ReservationTable {

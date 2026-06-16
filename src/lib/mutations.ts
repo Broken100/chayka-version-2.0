@@ -1,7 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
-import { queryKeys, type MenuItemRow, type TableRow, type BusinessConfigRow } from './queries';
-import type { MenuItem, ReservationTable, BusinessConfig, KanbanStage } from '../types';
+import {
+  queryKeys,
+  type MenuItemRow,
+  type TableRow,
+  type BusinessConfigRow,
+  type MenuCategoryRow,
+  type TableAreaApiRow
+} from './queries';
+import type { MenuItem, MenuCategory, TableAreaRow, ReservationTable, BusinessConfig, KanbanStage } from '../types';
 
 export interface AddReservationInput {
   customerName: string;
@@ -190,5 +197,99 @@ export function useSimulatePayment() {
   return useMutation({
     mutationFn: (input: SimulatePaymentInput) =>
       api.post<SimulatePaymentResult>('/payments/simulate', input)
+  });
+}
+
+// ─── Menu categories CRUD ─────────────────────────────────────────────────────
+
+export interface CreateMenuCategoryInput {
+  id: string;
+  name: { es: string; en: string };
+  displayOrder: number;
+}
+
+export interface UpdateMenuCategoryInput {
+  name?: { es?: string; en?: string };
+  displayOrder?: number;
+  active?: boolean;
+}
+
+export function useCreateMenuCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateMenuCategoryInput) =>
+      api.post<MenuCategoryRow>('/admin/menu-categories', input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.menuCategories });
+    }
+  });
+}
+
+export function useUpdateMenuCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateMenuCategoryInput }) =>
+      api.put<MenuCategoryRow>(`/admin/menu-categories/${id}`, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.menuCategories });
+    }
+  });
+}
+
+export function useDeleteMenuCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<null>(`/admin/menu-categories/${id}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.menuCategories });
+    }
+  });
+}
+
+// ─── Table areas CRUD ─────────────────────────────────────────────────────────
+
+export interface CreateTableAreaInput {
+  id: string;
+  name: { es: string; en: string };
+  description?: { es?: string; en?: string };
+  displayOrder: number;
+}
+
+export interface UpdateTableAreaInput {
+  name?: { es?: string; en?: string };
+  description?: { es?: string; en?: string };
+  displayOrder?: number;
+  active?: boolean;
+}
+
+export function useCreateTableArea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTableAreaInput) =>
+      api.post<TableAreaApiRow>('/admin/table-areas', input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.tableAreas });
+    }
+  });
+}
+
+export function useUpdateTableArea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateTableAreaInput }) =>
+      api.put<TableAreaApiRow>(`/admin/table-areas/${id}`, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.tableAreas });
+    }
+  });
+}
+
+export function useDeleteTableArea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<null>(`/admin/table-areas/${id}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.tableAreas });
+    }
   });
 }
