@@ -578,5 +578,6 @@ export const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
     '17:00',
     '18:30',
     '20:00'
-  ]
+  ],
+  transferQrUrl: null
 };
