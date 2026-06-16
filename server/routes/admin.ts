@@ -1,13 +1,17 @@
-import { eq } from 'drizzle-orm';
+import { eq, and, count } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { tables, reservations, businessConfig, menuItems, adminSessions } from '../db/schema.js';
+import { tables, reservations, businessConfig, menuItems, adminSessions, menuCategories, tableAreas } from '../db/schema.js';
 import {
   createTableSchema,
   updateTableSchema,
   updateBusinessConfigSchema,
   updateReservationStatusSchema,
   adminLoginSchema,
-  createMenuItemSchema
+  createMenuItemSchema,
+  createMenuCategorySchema,
+  updateMenuCategorySchema,
+  createTableAreaSchema,
+  updateTableAreaSchema
 } from '../lib/validation.js';
 import { requireAdmin, SESSION_COOKIE } from '../lib/auth.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
@@ -371,6 +375,203 @@ router.patch(
       return;
     }
     res.json(updated[0]);
+  })
+);
+
+// Menu categories CRUD
+
+router.post(
+  '/menu-categories',
+  asyncHandler(async (req, res) => {
+    const parsed = createMenuCategorySchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
+      return;
+    }
+    const data = parsed.data;
+    const existing = await db
+      .select({ id: menuCategories.id })
+      .from(menuCategories)
+      .where(eq(menuCategories.id, data.id))
+      .limit(1);
+    if (existing.length > 0) {
+      res.status(409).json({ error: 'Menu category id already exists' });
+      return;
+    }
+    const inserted = await db
+      .insert(menuCategories)
+      .values({
+        id: data.id,
+        nameEs: data.name.es,
+        nameEn: data.name.en,
+        displayOrder: data.displayOrder,
+        active: true
+      } as never)
+      .returning();
+    res.status(201).json(inserted[0]);
+  })
+);
+
+router.put(
+  '/menu-categories/:id',
+  asyncHandler(async (req, res) => {
+    const parsed = updateMenuCategorySchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
+      return;
+    }
+    const id = req.params.id;
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (parsed.data.name) {
+      if (parsed.data.name.es !== undefined) update.nameEs = parsed.data.name.es;
+      if (parsed.data.name.en !== undefined) update.nameEn = parsed.data.name.en;
+    }
+    if (parsed.data.displayOrder !== undefined) update.displayOrder = parsed.data.displayOrder;
+    if (parsed.data.active !== undefined) update.active = parsed.data.active;
+    const updated = await db
+      .update(menuCategories)
+      .set(update as never)
+      .where(eq(menuCategories.id, id))
+      .returning();
+    if (updated.length === 0) {
+      res.status(404).json({ error: 'Menu category not found' });
+      return;
+    }
+    res.json(updated[0]);
+  })
+);
+
+router.delete(
+  '/menu-categories/:id',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id;
+    // Count how many menu items reference this category.
+    const refs = await db
+      .select({ c: count() })
+      .from(menuItems)
+      .where(eq(menuItems.category, id));
+    const usedCount = Number(refs[0]?.c ?? 0);
+    if (usedCount > 0) {
+      // Soft-delete: mark inactive and return 409 so the UI can surface the count.
+      await db
+        .update(menuCategories)
+        .set({ active: false, updatedAt: new Date() } as never)
+        .where(eq(menuCategories.id, id));
+      res.status(409).json({ error: `${usedCount} items use this category` });
+      return;
+    }
+    const deleted = await db
+      .delete(menuCategories)
+      .where(eq(menuCategories.id, id))
+      .returning({ id: menuCategories.id });
+    if (deleted.length === 0) {
+      res.status(404).json({ error: 'Menu category not found' });
+      return;
+    }
+    res.status(204).end();
+  })
+);
+
+// Table areas CRUD
+
+router.post(
+  '/table-areas',
+  asyncHandler(async (req, res) => {
+    const parsed = createTableAreaSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
+      return;
+    }
+    const data = parsed.data;
+    const existing = await db
+      .select({ id: tableAreas.id })
+      .from(tableAreas)
+      .where(eq(tableAreas.id, data.id))
+      .limit(1);
+    if (existing.length > 0) {
+      res.status(409).json({ error: 'Table area id already exists' });
+      return;
+    }
+    const inserted = await db
+      .insert(tableAreas)
+      .values({
+        id: data.id,
+        nameEs: data.name.es,
+        nameEn: data.name.en,
+        descriptionEs: data.description?.es ?? null,
+        descriptionEn: data.description?.en ?? null,
+        displayOrder: data.displayOrder,
+        active: true
+      } as never)
+      .returning();
+    res.status(201).json(inserted[0]);
+  })
+);
+
+router.put(
+  '/table-areas/:id',
+  asyncHandler(async (req, res) => {
+    const parsed = updateTableAreaSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      res.status(400).json({ error: issue?.message ?? 'Invalid request body' });
+      return;
+    }
+    const id = req.params.id;
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (parsed.data.name) {
+      if (parsed.data.name.es !== undefined) update.nameEs = parsed.data.name.es;
+      if (parsed.data.name.en !== undefined) update.nameEn = parsed.data.name.en;
+    }
+    if (parsed.data.description) {
+      if (parsed.data.description.es !== undefined) update.descriptionEs = parsed.data.description.es;
+      if (parsed.data.description.en !== undefined) update.descriptionEn = parsed.data.description.en;
+    }
+    if (parsed.data.displayOrder !== undefined) update.displayOrder = parsed.data.displayOrder;
+    if (parsed.data.active !== undefined) update.active = parsed.data.active;
+    const updated = await db
+      .update(tableAreas)
+      .set(update as never)
+      .where(eq(tableAreas.id, id))
+      .returning();
+    if (updated.length === 0) {
+      res.status(404).json({ error: 'Table area not found' });
+      return;
+    }
+    res.json(updated[0]);
+  })
+);
+
+router.delete(
+  '/table-areas/:id',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id;
+    // Count how many tables reference this area.
+    const refs = await db
+      .select({ c: count() })
+      .from(tables)
+      .where(eq(tables.area, id as never));
+    const usedCount = Number(refs[0]?.c ?? 0);
+    if (usedCount > 0) {
+      await db
+        .update(tableAreas)
+        .set({ active: false, updatedAt: new Date() } as never)
+        .where(eq(tableAreas.id, id));
+      res.status(409).json({ error: `${usedCount} tables use this area` });
+      return;
+    }
+    const deleted = await db
+      .delete(tableAreas)
+      .where(eq(tableAreas.id, id))
+      .returning({ id: tableAreas.id });
+    if (deleted.length === 0) {
+      res.status(404).json({ error: 'Table area not found' });
+      return;
+    }
+    res.status(204).end();
   })
 );
 
