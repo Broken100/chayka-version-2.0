@@ -73,6 +73,7 @@ export const businessConfig = pgTable('business_config', {
   maxPeopleReservation: integer('max_people_reservation'),
   schedules: jsonb('schedules'),
   timeSlots: text('time_slots').array(),
+  transferQrUrl: text('transfer_qr_url'),
   updatedAt: timestamp('updated_at').defaultNow()
 });
 

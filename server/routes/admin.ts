@@ -160,6 +160,86 @@ router.delete(
   })
 );
 
+// ─── Transfer QR upload/delete ──────────────────────────────────────────────
+
+/**
+ * Helper: extract the filename from a stored `/uploads/<file>` URL. Returns
+ * `null` if the URL is missing or doesn't point at a local upload (e.g. a
+ * legacy absolute URL pasted in by hand). Used to safely remove the previous
+ * file from disk when re-uploading.
+ */
+function filenameFromQrUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (!url.startsWith('/uploads/')) return null;
+  const name = url.slice('/uploads/'.length);
+  if (!SAFE_FILENAME.test(name) || name === '.gitkeep' || extname(name) === '') {
+    return null;
+  }
+  return name;
+}
+
+router.post(
+  '/qr',
+  uploadSingle('file'),
+  asyncHandler(async (req, res) => {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+    const transferQrUrl = `/uploads/${file.filename}`;
+
+    // Replace any previous QR: drop the old file (best effort — ENOENT is
+    // fine, the column update is what we actually care about).
+    const previous = await db
+      .select({ transferQrUrl: businessConfig.transferQrUrl })
+      .from(businessConfig)
+      .where(eq(businessConfig.id, 1))
+      .limit(1);
+    const prevName = filenameFromQrUrl(previous[0]?.transferQrUrl);
+    if (prevName && prevName !== file.filename) {
+      try {
+        await unlink(resolve(UPLOADS_DIR, prevName));
+      } catch (err) {
+        const e = err as NodeJS.ErrnoException;
+        if (e.code !== 'ENOENT') throw err;
+      }
+    }
+
+    await db
+      .update(businessConfig)
+      .set({ transferQrUrl, updatedAt: new Date() } as never)
+      .where(eq(businessConfig.id, 1));
+
+    res.status(200).json({ transfer_qr_url: transferQrUrl });
+  })
+);
+
+router.delete(
+  '/qr',
+  asyncHandler(async (_req, res) => {
+    const previous = await db
+      .select({ transferQrUrl: businessConfig.transferQrUrl })
+      .from(businessConfig)
+      .where(eq(businessConfig.id, 1))
+      .limit(1);
+    const prevName = filenameFromQrUrl(previous[0]?.transferQrUrl);
+    if (prevName) {
+      try {
+        await unlink(resolve(UPLOADS_DIR, prevName));
+      } catch (err) {
+        const e = err as NodeJS.ErrnoException;
+        if (e.code !== 'ENOENT') throw err;
+      }
+    }
+    await db
+      .update(businessConfig)
+      .set({ transferQrUrl: null, updatedAt: new Date() } as never)
+      .where(eq(businessConfig.id, 1));
+    res.status(204).end();
+  })
+);
+
 // Menu items
 router.post(
   '/menu',

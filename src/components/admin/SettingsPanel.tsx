@@ -1,19 +1,23 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { BusinessConfig } from '../../types';
 import { useReservation } from '../../context/ReservationContext';
 import { useBusinessConfigQuery } from '../../lib/queries';
-import { useUpdateBusinessConfig } from '../../lib/mutations';
-import { Smartphone, Clock, MapPin, Users, Save } from 'lucide-react';
+import { useUpdateBusinessConfig, useUploadQr, useDeleteQr } from '../../lib/mutations';
+import { Smartphone, Clock, MapPin, Users, Save, QrCode, Upload, Trash2 } from 'lucide-react';
 
 export default function SettingsPanel() {
   const { language, addNotification } = useReservation();
   const isEs = language === 'es';
   const configQuery = useBusinessConfigQuery();
   const updateConfigMutation = useUpdateBusinessConfig();
+  const uploadQr = useUploadQr();
+  const deleteQr = useDeleteQr();
+  const qrFileInputRef = useRef<HTMLInputElement>(null);
   const bc: BusinessConfig = configQuery.data ?? {
     name: '', location: '', locationLink: '', whatsappNumber: '',
     minPeopleReservation: 1, maxPeopleReservation: 10,
-    schedules: [], timeSlots: []
+    schedules: [], timeSlots: [],
+    transferQrUrl: null
   };
 
   const [draft, setDraft] = useState<Partial<BusinessConfig>>({});
@@ -26,6 +30,48 @@ export default function SettingsPanel() {
       onSuccess: () => {
         addNotification(isEs ? 'Configuración' : 'Settings', isEs ? 'Sección guardada' : 'Section saved', 'success');
         setDraft({});
+      }
+    });
+  };
+
+  const handleQrFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadQr.mutate(file, {
+      onSuccess: () => {
+        addNotification(
+          isEs ? 'Pagos' : 'Payments',
+          isEs ? 'QR actualizado' : 'QR updated',
+          'success'
+        );
+      },
+      onError: (err) => {
+        addNotification(
+          isEs ? 'Error' : 'Error',
+          err instanceof Error ? err.message : 'Upload failed',
+          'alert'
+        );
+      }
+    });
+    // Reset the input so re-selecting the same file still fires `change`.
+    e.target.value = '';
+  };
+
+  const handleQrDelete = () => {
+    deleteQr.mutate(undefined, {
+      onSuccess: () => {
+        addNotification(
+          isEs ? 'Pagos' : 'Payments',
+          isEs ? 'QR eliminado' : 'QR removed',
+          'success'
+        );
+      },
+      onError: (err) => {
+        addNotification(
+          isEs ? 'Error' : 'Error',
+          err instanceof Error ? err.message : 'Delete failed',
+          'alert'
+        );
       }
     });
   };
@@ -148,6 +194,81 @@ export default function SettingsPanel() {
           data-testid="admin-conf-save-reservations">
           <Save className="w-3.5 h-3.5" />{isEs ? 'Guardar Capacidad' : 'Save Capacity'}
         </button>
+      </div>
+
+      {/* PAYMENTS / PAGOS — Transfer QR */}
+      <div className="bg-white border border-espresso/15 p-5 rounded-2xl space-y-4 text-left shadow-sm">
+        <h3 className="text-sm font-bold text-ochre uppercase tracking-widest border-b border-espresso/10 pb-2 flex items-center gap-1.5">
+          <QrCode className="w-4 h-4" /><span>{isEs ? 'Pagos' : 'Payments'}</span>
+        </h3>
+        <p className="text-[10px] text-espresso/60 -mt-2">
+          {isEs
+            ? 'Sube el QR que verán los clientes al elegir transferencia bancaria.'
+            : 'Upload the QR customers will see when choosing bank transfer.'}
+        </p>
+
+        <div className="flex flex-col items-center gap-3">
+          {bc.transferQrUrl ? (
+            <img
+              src={bc.transferQrUrl}
+              alt={isEs ? 'QR de transferencia' : 'Transfer QR'}
+              width={200}
+              height={200}
+              className="w-[200px] h-[200px] object-contain border border-espresso/15 rounded-lg bg-white"
+              data-testid="admin-payments-qr-preview"
+            />
+          ) : (
+            <div
+              className="w-[200px] h-[200px] border-2 border-dashed border-espresso/25 rounded-lg flex flex-col items-center justify-center text-espresso/40 bg-espresso/[0.02]"
+              data-testid="admin-payments-qr-placeholder"
+            >
+              <QrCode className="w-10 h-10 mb-1.5" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">
+                {isEs ? 'Sin QR' : 'No QR'}
+              </span>
+            </div>
+          )}
+
+          <input
+            ref={qrFileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={handleQrFileChange}
+            className="hidden"
+            data-testid="admin-payments-qr-input"
+          />
+
+          <div className="flex flex-wrap gap-2 justify-center">
+            <button
+              type="button"
+              onClick={() => qrFileInputRef.current?.click()}
+              disabled={uploadQr.isPending}
+              className="bg-ochre hover:bg-ochre/90 disabled:bg-ochre/60 text-coffee-bg text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all"
+              data-testid="admin-payments-qr-upload-btn"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              {uploadQr.isPending
+                ? (isEs ? 'Subiendo…' : 'Uploading…')
+                : bc.transferQrUrl
+                  ? (isEs ? 'Reemplazar QR' : 'Replace QR')
+                  : (isEs ? 'Subir QR' : 'Upload QR')}
+            </button>
+            {bc.transferQrUrl && (
+              <button
+                type="button"
+                onClick={handleQrDelete}
+                disabled={deleteQr.isPending}
+                className="bg-white border border-espresso/25 hover:border-rose-700 hover:text-rose-700 text-espresso/70 text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
+                data-testid="admin-payments-qr-remove-btn"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deleteQr.isPending
+                  ? (isEs ? 'Eliminando…' : 'Removing…')
+                  : (isEs ? 'Eliminar QR' : 'Remove QR')}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

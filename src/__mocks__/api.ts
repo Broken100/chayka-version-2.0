@@ -50,6 +50,7 @@ const configRow: BusinessConfigRow = {
   maxPeopleReservation: DEFAULT_BUSINESS_CONFIG.maxPeopleReservation,
   schedules: DEFAULT_BUSINESS_CONFIG.schedules,
   timeSlots: DEFAULT_BUSINESS_CONFIG.timeSlots,
+  transferQrUrl: DEFAULT_BUSINESS_CONFIG.transferQrUrl,
   updatedAt: null
 };
 

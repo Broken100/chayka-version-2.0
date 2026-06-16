@@ -66,7 +66,8 @@ router.get(
         minPeopleReservation: 1,
         maxPeopleReservation: 10,
         schedules: [],
-        timeSlots: []
+        timeSlots: [],
+        transferQrUrl: null
       });
       return;
     }

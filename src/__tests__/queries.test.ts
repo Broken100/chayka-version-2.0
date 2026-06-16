@@ -75,11 +75,13 @@ describe('row → domain mappers', () => {
       maxPeopleReservation: null,
       schedules: null,
       timeSlots: null,
+      transferQrUrl: null,
       updatedAt: null
     });
     expect(c.name).toBe('');
     expect(c.minPeopleReservation).toBe(1);
     expect(c.maxPeopleReservation).toBe(10);
     expect(c.timeSlots).toEqual([]);
+    expect(c.transferQrUrl).toBeNull();
   });
 });

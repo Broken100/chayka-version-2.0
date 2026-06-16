@@ -57,6 +57,7 @@ export interface BusinessConfigRow {
   maxPeopleReservation: number | null;
   schedules: Array<{ day: string; hours: string }> | null;
   timeSlots: string[] | null;
+  transferQrUrl: string | null;
   updatedAt: string | null;
 }
 
@@ -101,7 +102,8 @@ export function rowToBusinessConfig(row: BusinessConfigRow): BusinessConfig {
     minPeopleReservation: row.minPeopleReservation ?? 1,
     maxPeopleReservation: row.maxPeopleReservation ?? 10,
     schedules: row.schedules ?? [],
-    timeSlots: row.timeSlots ?? []
+    timeSlots: row.timeSlots ?? [],
+    transferQrUrl: row.transferQrUrl ?? null
   };
 }
 
