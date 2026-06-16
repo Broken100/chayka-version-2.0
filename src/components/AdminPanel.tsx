@@ -13,6 +13,7 @@ import MenuManager from './admin/MenuManager';
 import AdminLogin from './admin/AdminLogin';
 import TablesManager from './admin/TablesManager';
 import SettingsPanel from './admin/SettingsPanel';
+import CategoryManager from './admin/CategoryManager';
 import {
   Calendar,
   Coffee,
@@ -22,7 +23,7 @@ import {
 } from 'lucide-react';
 
 interface AdminPanelProps {
-  categories: Category[];
+  categories?: Category[];
 }
 
 export default function AdminPanel({ categories }: AdminPanelProps) {
@@ -49,7 +50,7 @@ export default function AdminPanel({ categories }: AdminPanelProps) {
   };
 
   // Active sub-sections inside Admin dashboard
-  const [activeTab, setActiveTab] = useState<'reservations' | 'menu' | 'tables' | 'settings'>('reservations');
+  const [activeTab, setActiveTab] = useState<'reservations' | 'menu' | 'categories' | 'tables' | 'settings'>('reservations');
 
   // Computations for dashboard overview cards
   const reservationsData = reservationsQuery.data ?? [];
@@ -72,6 +73,7 @@ export default function AdminPanel({ categories }: AdminPanelProps) {
   const tabLabels = {
     reservations: isEs ? 'Tablero Kanban' : 'Kanban Board',
     menu: isEs ? 'Gestor de Menú' : 'Menu Manager',
+    categories: isEs ? 'Categorías' : 'Categories',
     tables: isEs ? 'Mesas y Zonas' : 'Tables & Areas',
     settings: isEs ? 'Configuración' : 'Settings'
   };
@@ -206,6 +208,7 @@ export default function AdminPanel({ categories }: AdminPanelProps) {
       {/* RENDER ACTIVE TAB */}
       {activeTab === 'reservations' && <KanbanBoard />}
       {activeTab === 'menu' && <MenuManager categories={categories} />}
+      {activeTab === 'categories' && <CategoryManager />}
       {activeTab === 'tables' && <TablesManager />}
       {activeTab === 'settings' && <SettingsPanel />}
     </div>

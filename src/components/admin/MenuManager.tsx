@@ -1,24 +1,28 @@
 import React, { useState } from 'react';
 import { MenuItem, Category } from '../../types';
 import { useReservation } from '../../context/ReservationContext';
-import { useMenuQuery } from '../../lib/queries';
+import { useMenuQuery, useMenuCategoriesQuery } from '../../lib/queries';
 import { useUpdateMenuProduct, useCreateMenuProduct, useDeleteMenuProduct } from '../../lib/mutations';
 import { t } from '../../utils/translations';
-import { INITIAL_CATEGORIES } from '../../data';
 import { Plus, Edit2, Trash2, Save, X, Clock, Sparkles, Eye, EyeOff } from 'lucide-react';
 
 interface MenuManagerProps {
   categories?: Category[];
 }
 
-export default function MenuManager({ categories = INITIAL_CATEGORIES }: MenuManagerProps) {
+export default function MenuManager({ categories }: MenuManagerProps) {
   const { language, addNotification } = useReservation();
   const isEs = language === 'es';
   const menuQuery = useMenuQuery();
+  const menuCategoriesQuery = useMenuCategoriesQuery({ activeOnly: true });
   const updateMenuMutation = useUpdateMenuProduct();
   const createMenuMutation = useCreateMenuProduct();
   const deleteMenuMutation = useDeleteMenuProduct();
   const menuProducts: MenuItem[] = menuQuery.data ?? [];
+  // Prefer live query; fall back to legacy prop if provided.
+  const liveCategories = menuCategoriesQuery.data ?? [];
+  const effectiveCategories: Category[] =
+    categories ?? (liveCategories as unknown as Category[]);
 
   const [editingProduct, setEditingProduct] = useState<MenuItem | null>(null);
   const [isAddingProduct, setIsAddingProduct] = useState<boolean>(false);
@@ -207,7 +211,7 @@ export default function MenuManager({ categories = INITIAL_CATEGORIES }: MenuMan
             <div><label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">Categoría</label>
               <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)}
                 className="w-full bg-white border border-espresso/20 rounded-lg text-xs py-2 px-3" id="edit-prod-cat">
-                {categories.map((c) => (<option key={c.id} value={c.id}>{c.name[language]}</option>))}
+                {effectiveCategories.map((c) => (<option key={c.id} value={c.id}>{c.name[language]}</option>))}
               </select></div>
             <div><label className="block text-[10px] uppercase font-bold text-espresso/70 mb-1">Imagen URL</label>
               <input type="text" placeholder="/images/humita.png" value={formImage}
@@ -239,7 +243,7 @@ export default function MenuManager({ categories = INITIAL_CATEGORIES }: MenuMan
       {/* Products List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4" id="admin-product-management-list">
         {menuProducts.map((p) => {
-          const productCategory = categories.find(c => c.id === p.category);
+          const productCategory = effectiveCategories.find(c => c.id === p.category);
           return (
             <div key={p.id}
               className={`bg-white border p-4 rounded-xl flex gap-3 justify-between items-start shadow-sm transition-all hover:border-espresso/30 ${p.active ? 'border-espresso/15' : 'border-espresso/10 opacity-70'}`}

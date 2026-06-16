@@ -3,15 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect } from 'react';
-import { MenuItem, Category, ReservationTable, Reservation, BusinessConfig } from './types';
-import { INITIAL_CATEGORIES } from './data';
+import { useEffect, useMemo } from 'react';
+import { MenuItem, Category, ReservationTable, Reservation, BusinessConfig, MenuCategory } from './types';
 import MenuSection from './components/MenuSection';
 import BookingSection from './components/BookingSection';
 import AdminPanel from './components/AdminPanel';
 import NotificationToast, { NotificationMsg } from './components/NotificationToast';
 import { ReservationProvider, useReservation } from './context/ReservationContext';
 import { t } from './utils/translations';
+import { useMenuCategoriesQuery } from './lib/queries';
 
 import AppHeader from './components/layout/AppHeader';
 import AppFooter from './components/layout/AppFooter';
@@ -20,6 +20,32 @@ import HeroBanner from './components/home/HeroBanner';
 import AttractionsSection from './components/home/AttractionsSection';
 import TraditionsBanner from './components/home/TraditionsBanner';
 import GallerySection from './components/home/GallerySection';
+
+/**
+ * Local map from menu category id to a Lucide icon name.
+ * Menu categories no longer carry an `icon` column — the icon is purely a
+ * client-side decoration that lives here. Unknown ids fall back to 'Coffee'.
+ */
+const ICON_BY_CATEGORY_ID: Record<string, string> = {
+  hot_drinks: 'Coffee',
+  frappes: 'Sparkles',
+  soft_drinks: 'Flame'
+};
+
+function menuCategoriesToCategories(
+  rows: MenuCategory[] | undefined
+): Category[] {
+  if (!rows) return [];
+  return rows
+    .slice()
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      icon: ICON_BY_CATEGORY_ID[c.id] ?? 'Coffee',
+      description: { es: '', en: '' }
+    }));
+}
 
 function AppContent() {
   const {
@@ -37,6 +63,12 @@ function AppContent() {
     addNotification,
     dismissNotification
   } = useReservation();
+
+  const menuCategoriesQuery = useMenuCategoriesQuery();
+  const menuCategories: Category[] = useMemo(
+    () => menuCategoriesToCategories(menuCategoriesQuery.data),
+    [menuCategoriesQuery.data]
+  );
 
   useEffect(() => {
     // Initial greeting notification
@@ -99,7 +131,7 @@ function AppContent() {
       {activeView === 'menu' && (
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" id="menu-view-module">
           <MenuSection
-            categories={INITIAL_CATEGORIES}
+            categories={menuCategories}
             products={menuProducts}
             interactiveMode={false}
           />
@@ -136,9 +168,7 @@ function AppContent() {
       {/* CORE ADMINISTRATIVE PORTAL VIEW MODULE */}
       {activeView === 'admin' && (
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" id="admin-view-module">
-          <AdminPanel
-            categories={INITIAL_CATEGORIES}
-          />
+          <AdminPanel />
         </main>
       )}
 

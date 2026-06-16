@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { MenuItem, Category, ReservationTable, BusinessConfig } from './types';
+import { MenuItem, ReservationTable, BusinessConfig } from './types';
 import drink01 from './assets/drink_01.jpg';
 import drink02 from './assets/drink_02.jpg';
 import drink03 from './assets/drink_03.jpg';
@@ -13,44 +13,7 @@ import drink06 from './assets/drink_06.jpg';
 import drink07 from './assets/drink_07.jpg';
 import drink08 from './assets/drink_08.jpg';
 
-export const INITIAL_CATEGORIES: Category[] = [
-  {
-    id: 'hot_drinks',
-    name: {
-      es: 'Bebidas Calientes',
-      en: 'Hot Drinks'
-    },
-    icon: 'Coffee',
-    description: {
-      es: 'Café de especialidad y bebidas calientes preparadas al instante.',
-      en: 'Specialty coffee and hot drinks brewed fresh.'
-    }
-  },
-  {
-    id: 'frappes',
-    name: {
-      es: 'Frappés',
-      en: 'Frappes'
-    },
-    icon: 'Sparkles',
-    description: {
-      es: 'Nuestras famosas bebidas heladas y cremosas con toppings especiales.',
-      en: 'Our famous ice-blended, creamy drinks with special toppings.'
-    }
-  },
-  {
-    id: 'soft_drinks',
-    name: {
-      es: 'Bebidas Soft',
-      en: 'Soft Drinks'
-    },
-    icon: 'Flame',
-    description: {
-      es: 'Bebidas refrescantes y frías para acompañar tus momentos.',
-      en: 'Refreshing cold drinks to pair with your moments.'
-    }
-  }
-];
+// Menu categories and table areas are now DB-backed (PR#1 of admin-polish-and-extras).
 
 export const INITIAL_PRODUCTS: MenuItem[] = [
   // Bebidas Calientes

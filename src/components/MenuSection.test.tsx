@@ -1,13 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '../test-utils';
 import MenuSection from './MenuSection';
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS } from '../data';
+import { INITIAL_PRODUCTS } from '../data';
+import type { Category } from '../types';
+
+const TEST_CATEGORIES: Category[] = [
+  {
+    id: 'hot_drinks',
+    name: { es: 'Bebidas Calientes', en: 'Hot Drinks' },
+    icon: 'Coffee',
+    description: { es: '', en: '' }
+  },
+  {
+    id: 'frappes',
+    name: { es: 'Frappés', en: 'Frappes' },
+    icon: 'Sparkles',
+    description: { es: '', en: '' }
+  },
+  {
+    id: 'soft_drinks',
+    name: { es: 'Bebidas Soft', en: 'Soft Drinks' },
+    icon: 'Flame',
+    description: { es: '', en: '' }
+  }
+];
 
 describe('MenuSection', () => {
   it('renders category filters and product cards', () => {
     render(
       <MenuSection
-        categories={INITIAL_CATEGORIES}
+        categories={TEST_CATEGORIES}
         products={INITIAL_PRODUCTS}
         interactiveMode={false}
       />
@@ -25,7 +47,7 @@ describe('MenuSection', () => {
   it('filters products by search query', async () => {
     render(
       <MenuSection
-        categories={INITIAL_CATEGORIES}
+        categories={TEST_CATEGORIES}
         products={INITIAL_PRODUCTS}
         interactiveMode={false}
       />
@@ -43,7 +65,7 @@ describe('MenuSection', () => {
   it('opens product detail modal when clicking details', () => {
     render(
       <MenuSection
-        categories={INITIAL_CATEGORIES}
+        categories={TEST_CATEGORIES}
         products={INITIAL_PRODUCTS}
         interactiveMode={false}
       />
