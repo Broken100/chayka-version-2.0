@@ -158,3 +158,13 @@ export const updateTableAreaSchema = z.object({
   displayOrder: z.number().int().nonnegative().optional(),
   active: z.boolean().optional()
 });
+
+// PR#4: notifications list pagination. Default 50, hard cap 200.
+export const notificationListQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .positive('limit must be positive')
+    .max(200, 'limit must be at most 200')
+    .default(50)
+});
