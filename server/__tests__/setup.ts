@@ -61,9 +61,12 @@ export async function truncateTables(): Promise<void> {
     reservations,
     businessConfig,
     menuCategories,
-    tableAreas
+    tableAreas,
+    notifications
   } = await import('../db/schema.js');
-  // Order matters: tables are referenced by reservations.
+  // Order matters: tables are referenced by reservations; notifications
+  // are independent but listed for completeness.
+  await db.delete(notifications);
   await db.delete(reservations);
   await db.delete(tables);
   await db.delete(menuItems);
